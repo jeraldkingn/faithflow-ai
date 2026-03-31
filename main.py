@@ -111,8 +111,7 @@ def create_scene(text, output, duration=DEFAULT_DURATION):
 
 def get_scenes_from_sheet():
     scope = ["https://www.googleapis.com/auth/spreadsheets"]
-    creds_dict = json.loads(os.getenv("GOOGLE_CREDENTIALS"))
-    creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+    creds = Credentials.from_service_account_file("credentials.json", scopes=scope)
     client = gspread.authorize(creds)
 
     sheet = client.open("faithflow-data").sheet1
