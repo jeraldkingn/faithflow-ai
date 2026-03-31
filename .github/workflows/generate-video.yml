@@ -42,6 +42,7 @@ jobs:
           LINE_3: ${{ github.event.inputs.line3 }}
           LINE_4: ${{ github.event.inputs.line4 }}
           LINE_5: ${{ github.event.inputs.line5 }}
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
         run: python main.py
 
       - name: 📤 Upload video
