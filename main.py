@@ -97,7 +97,7 @@ def create_scene(text, output, duration=DEFAULT_DURATION):
         "-loop", "1",
         "-i", "bg.jpg",
         "-t", str(duration),
-        "-vf", f"zoompan=z='min(zoom+0.0015,1.1)':d=75:fps=25,scale={VIDEO_WIDTH}:{VIDEO_HEIGHT},boxblur=10:1,{drawtext_filter}",
+        "-vf", f"scale={VIDEO_WIDTH}:{VIDEO_HEIGHT}:force_original_aspect_ratio=increase,crop={VIDEO_WIDTH}:{VIDEO_HEIGHT},boxblur=10:1,{drawtext_filter}",
         "-y",
         output
     ]
