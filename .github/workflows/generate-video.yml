@@ -44,7 +44,10 @@ jobs:
         run: sudo apt update && sudo apt install -y ffmpeg
       
       - name: 📝 Create credentials file
-        run: echo "${{ secrets.GOOGLE_CREDENTIALS }}" > credentials.json
+        run: |
+          cat <<EOF > credentials.json
+          ${{ secrets.GOOGLE_CREDENTIALS }}
+          EOF
 
       - name: ▶️ Run video script
         env:
