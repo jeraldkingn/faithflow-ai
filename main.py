@@ -59,23 +59,37 @@ def create_scene(text, output, duration=DEFAULT_DURATION):
         output: Output video file path
         duration: Duration of the video in seconds (default: 3)
     """
-    # Write text to temporary file for ffmpeg processing
-    temp_file = f"temp_{output}.txt"
-    with open(temp_file, "w", encoding="utf-8") as f:
-        f.write(text)
-
+    # Split text into lines for individual centering
+    lines = text.split('\n')
+    
     # Build ffmpeg command to create text overlay video
     video_size = f"{VIDEO_WIDTH}x{VIDEO_HEIGHT}"
-    # Main text
-    main_text_filter = (
-        f"drawtext=fontfile={FONT_PATH}:"
-        f"textfile={temp_file}:"
-        f"fontcolor=white:"
-        f"fontsize={FONT_SIZE}:"
-        f"line_spacing={LINE_SPACING}:"
-        f"x=(w-text_w)/2:"
-        f"y=(h-text_h)/2+{TEXT_Y_OFFSET}"
-    )
+    
+    # Create drawtext filters for each line, each centered individually
+    drawtext_filters = []
+    
+    # Calculate starting Y position to center the entire block vertically
+    total_lines = len(lines)
+    line_height = FONT_SIZE + LINE_SPACING
+    total_text_height = total_lines * line_height - LINE_SPACING  # Subtract extra spacing
+    start_y = (VIDEO_HEIGHT - total_text_height) / 2 + TEXT_Y_OFFSET
+    
+    for i, line in enumerate(lines):
+        if line.strip():  # Only add non-empty lines
+            safe_line = line.replace("'", "\\'").replace(":", "\\:")
+            y_position = start_y + i * line_height
+            line_filter = (
+                f"drawtext=fontfile={FONT_PATH}:"
+                f"text='{safe_line}':"
+                f"fontcolor=white:"
+                f"fontsize={FONT_SIZE}:" 
+                f"x=(w-text_w)/2:"
+                f"y={y_position}"
+            )
+            drawtext_filters.append(line_filter)
+
+    # Join all line filters with commas
+    main_text_filter = ",".join(drawtext_filters)
 
     # Watermark
     safe_watermark = WATERMARK_TEXT.replace("'", "\\'")
@@ -114,10 +128,6 @@ def create_scene(text, output, duration=DEFAULT_DURATION):
     if not os.path.exists(output):
         print(f"❌ Failed to create {output}")
         exit()
-    
-    # Clean up temporary text file
-    if os.path.exists(temp_file):
-        os.remove(temp_file)
 
 from google.auth.transport.requests import Request
 
