@@ -2,22 +2,6 @@ name: Generate Video
 
 on:
   workflow_dispatch:
-    inputs:
-      line1:
-        description: "Hook"
-        required: true
-      line2:
-        description: "Emotion"
-        required: true
-      line3:
-        description: "Struggle"
-        required: true
-      line4:
-        description: "Message / Verse"
-        required: true
-      line5:
-        description: "Ending"
-        required: true
 
 jobs:
   build:
