@@ -1,0 +1,51 @@
+name: Generate Video
+
+on:
+  workflow_dispatch:
+    inputs:
+      line1:
+        description: "Hook"
+        required: true
+      line2:
+        description: "Emotion"
+        required: true
+      line3:
+        description: "Struggle"
+        required: true
+      line4:
+        description: "Message / Verse"
+        required: true
+      line5:
+        description: "Ending"
+        required: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout repo
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 🎬 Install ffmpeg
+        run: sudo apt update && sudo apt install -y ffmpeg
+
+      - name: ▶️ Run video script
+        env:
+          LINE_1: ${{ github.event.inputs.line1 }}
+          LINE_2: ${{ github.event.inputs.line2 }}
+          LINE_3: ${{ github.event.inputs.line3 }}
+          LINE_4: ${{ github.event.inputs.line4 }}
+          LINE_5: ${{ github.event.inputs.line5 }}
+        run: python main.py
+
+      - name: 📤 Upload video
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-video
+          path: videos/*.mp4

@@ -1,14 +1,18 @@
+import json
 import os
 import subprocess
 from datetime import datetime
+from wsgiref import headers
+import gspread
+from google.oauth2.service_account import Credentials
 
 # Configuration constants
-FONT_PATH = "font.ttf"
+FONT_PATH = os.path.abspath("font.ttf")
 VIDEO_WIDTH = 1080
 VIDEO_HEIGHT = 1920
 FONT_SIZE = 80
 LINE_SPACING = 12
-DEFAULT_DURATION = 3
+DEFAULT_DURATION = 2.5
 TEXT_Y_OFFSET = -100
 
 # Watermark configuration
@@ -24,6 +28,23 @@ WATERMARK_Y_OFFSET = 120
 TEMP_TEXT_FILE = "temp.txt"
 FILE_LIST_FILE = "file_list.txt"
 OUTPUT_FOLDER = "videos"
+
+def get_user_scenes():
+    """
+    Get scenes from environment variables (for GitHub Actions)
+    Fallback to manual input if not provided
+    """
+    scenes = []
+
+    for i in range(1, 6):
+        text = os.getenv(f"LINE_{i}")
+        if not text:
+            text = input(f"Enter line {i}: ")
+
+        text = text.replace("\\n", "\n")
+        scenes.append(text)
+
+    return scenes
 
 def create_scene(text, output, duration=DEFAULT_DURATION):
     """
@@ -52,9 +73,11 @@ def create_scene(text, output, duration=DEFAULT_DURATION):
     )
 
     # Watermark
+    safe_watermark = WATERMARK_TEXT.replace("'", "\\'")
+
     watermark_filter = (
         f"drawtext=fontfile={FONT_PATH}:"
-        f"text='{WATERMARK_TEXT}':"
+        f"text='{safe_watermark}':"
         f"fontcolor={WATERMARK_FONTCOLOR}:"
         f"fontsize={WATERMARK_FONTSIZE}:"
         f"shadowcolor={WATERMARK_SHADOWCOLOR}:shadowx={WATERMARK_SHADOWX}:shadowy={WATERMARK_SHADOWY}:"
@@ -74,41 +97,57 @@ def create_scene(text, output, duration=DEFAULT_DURATION):
     ]
 
     print(f"\n🎬 Creating scene: {output}")
-    result = subprocess.run(cmd)
+    result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    if result.returncode != 0:
+        print("❌ FFmpeg error:")
+        print(result.stderr.decode())
+        exit()
 
     # Verify the scene was created successfully
     if not os.path.exists(output):
         print(f"❌ Failed to create {output}")
         exit()
 
-def get_user_scenes():
-    print("\n✍️ Enter your 5 lines for the video:\n")
+def get_scenes_from_sheet():
+    scope = ["https://www.googleapis.com/auth/spreadsheets"]
+    creds_dict = json.loads(os.getenv("GOOGLE_CREDENTIALS"))
+    creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+    client = gspread.authorize(creds)
 
-    prompts = [
-        "1. Hook (attention grabber): ",
-        "2. Emotion (pain/feeling): ",
-        "3. Struggle: ",
-        "4. Message / Verse: ",
-        "5. Ending (hope/impact): "
-    ]
+    sheet = client.open("faithflow-data").sheet1
+    rows = sheet.get_all_records()
 
-    scenes = []
-    for prompt in prompts:
-        text = input(prompt)
-        text = text.replace("\\n", "\n")
-        scenes.append(text)
+    for i, row in enumerate(rows):
+        if row.get("Status", "") != "DONE":
+            scenes = [
+                row.get("Hook", ""),
+                row.get("Emotion", ""),
+                row.get("Struggle", ""),
+                row.get("Message", ""),
+                row.get("Ending", "")
+            ]
+            return i + 2, scenes, sheet  # row index + data
 
-    return scenes
+    return None, None, sheet
 
 def main():
     """Generate a vertical video with multiple text scenes and combine them."""
+    
+    # Ensure Google service account credentials file exists
+    if not os.path.exists("credentials.json"):
+        print("❌ credentials.json not found")
+        exit()
     
     # Create output folder if it doesn't exist
     if not os.path.exists(OUTPUT_FOLDER):
         os.makedirs(OUTPUT_FOLDER)
     
-    # Define the video script scenes
-    scenes = get_user_scenes()
+    row_index, scenes, sheet = get_scenes_from_sheet()
+
+    if not scenes:
+        print("No new data found")
+        return
     
     # Step 1: Generate individual scene videos
     scene_files = []
@@ -127,16 +166,27 @@ def main():
     # Step 3: Combine all scenes into final video
     output_filename = os.path.join(OUTPUT_FOLDER, f"output_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4")
     print(f"\n🎥 Merging scenes into: {output_filename}")
-    subprocess.run([
+    result = subprocess.run([
         "ffmpeg",
         "-f", "concat",
         "-safe", "0",
         "-i", FILE_LIST_FILE,
-        "-c", "copy",
+        "-c:v", "libx264",
+        "-c:a", "aac",
         output_filename
-    ])
+    ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    if result.returncode != 0:
+        print("❌ FFmpeg error during concat:")
+        print(result.stderr.decode())
+        exit()
 
     print("✅ Video generated successfully!")
+    
+    # Mark row as done in sheet
+    headers = sheet.row_values(1)
+    status_col = headers.index("Status") + 1
+    sheet.update_cell(row_index, status_col, "DONE")
 
     # Step 4: Clean up temporary files
     for file in scene_files:
