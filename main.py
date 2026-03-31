@@ -155,6 +155,7 @@ def upload_to_youtube(video_file, title):
     youtube = build("youtube", "v3", credentials=creds)
 
     request = youtube.videos().insert(
+        part="snippet,status",
         body={
             "snippet": {
                 "title": f"{title}... ❤️ #shorts",
