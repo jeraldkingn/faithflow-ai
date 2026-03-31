@@ -2,7 +2,7 @@ name: Generate Video
 
 on:
   schedule:
-    - cron: "30 4-16/3 * * *"   # 5 times a day
+    - cron: "*/5 * * * *"   # 5 times a day
   workflow_dispatch:
 
 jobs:
