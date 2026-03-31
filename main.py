@@ -20,12 +20,12 @@ TEXT_Y_OFFSET = -100
 
 # Watermark configuration
 WATERMARK_TEXT = "@faithflow-in-jesus"
-WATERMARK_FONTSIZE = 40
-WATERMARK_FONTCOLOR = "white@0.4"
+WATERMARK_FONTSIZE = 70
+WATERMARK_FONTCOLOR = "white@0.5"
 WATERMARK_SHADOWCOLOR = "black"
 WATERMARK_SHADOWX = 2
 WATERMARK_SHADOWY = 2
-WATERMARK_Y_OFFSET = 140
+WATERMARK_Y_OFFSET = 500
 
 # Temporary files
 TEMP_TEXT_FILE = "temp.txt"
@@ -158,7 +158,7 @@ def upload_to_youtube(video_file, title):
         body={
             "snippet": {
                 "title": f"{title}... ❤️ #shorts",
-                "description": "Follow @faithflow-in-jesus https://www.youtube.com/@faithflow-in-jesus 🙏\n#shorts #faith #jesus #christian #bible #prayer #worship #god #holyspirit #scripture #gospel #salvation #hope #love #church #ministry #inspiration #spiritual #christ #amen #blessed #motivation",
+                "description": "Follow @faithflow-in-jesus 🙏\n#shorts #faith #jesus #christian #bible #prayer #worship #god #holyspirit #scripture #gospel #salvation #hope #love #church #ministry #inspiration #spiritual #christ #amen #blessed #motivation",
                 "tags": ["faith", "jesus", "christian", "bible", "prayer", "worship", "god", "holy spirit", "scripture", "gospel", "salvation", "christianity", "hope", "love", "church", "ministry", "inspiration", "spiritual", "religion", "christ", "amen", "blessed", "motivation", "shorts"],
                 "categoryId": "22"
             },
