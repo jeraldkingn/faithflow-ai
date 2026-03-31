@@ -118,7 +118,7 @@ def get_scenes_from_sheet():
     creds = Credentials.from_service_account_file("credentials.json", scopes=scope)
     client = gspread.authorize(creds)
 
-    sheet = client.open_by_key("SPREADSHEET_ID").sheet1
+    sheet = client.open_by_key("1mw8hbnpAAtyna4kpM7lale04HxF4rg4tFooFT1M7VnI").sheet1
     rows = sheet.get_all_records()
 
     for i, row in enumerate(rows):
