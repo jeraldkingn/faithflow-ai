@@ -234,7 +234,7 @@ def main():
         "-shortest",
         "-y",
         output_filename
-    ]), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
     if result.returncode != 0:
         print("❌ FFmpeg error during concat:")
