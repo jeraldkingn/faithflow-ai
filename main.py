@@ -194,6 +194,8 @@ def get_scenes_from_sheet():
                 row.get("Message", ""),
                 row.get("Ending", "")
             ]
+            # Convert literal \n and /n to actual newlines
+            scenes = [text.replace("\\n", "\n").replace("/n", "\n") for text in scenes]
             return i + 2, scenes, sheet  # row index + data
 
     return None, None, sheet
