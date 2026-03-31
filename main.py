@@ -45,7 +45,7 @@ def get_user_scenes():
         if not text:
             text = input(f"Enter line {i}: ")
 
-        text = text.replace("\\n", "\n")
+        text = text.replace("\\n", "\n").replace("/n", "\n")
         scenes.append(text)
 
     return scenes
