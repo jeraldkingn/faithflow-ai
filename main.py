@@ -154,13 +154,11 @@ def upload_to_youtube(video_file, title):
 
     youtube = build("youtube", "v3", credentials=creds)
 
-    request = youtube.videos().insert(
-        part="snippet,status",
         body={
             "snippet": {
                 "title": f"{title}... ❤️ #shorts",
-                "description": "Follow @faithflow 🙏\n#shorts #faith #jesus",
-                "tags": ["faith", "jesus", "motivation", "shorts"],
+                "description": "Follow [@faithflow](https://www.youtube.com/@faithflow-in-jesus) 🙏\n#shorts #faith #jesus",
+                "tags": ["faith", "jesus", "christian", "bible", "prayer", "worship", "god", "holy spirit", "scripture", "gospel", "salvation", "christianity", "hope", "love", "church", "ministry", "inspiration", "spiritual", "religion", "christ", "amen", "blessed", "motivation", "shorts"],
                 "categoryId": "22"
             },
             "status": {
