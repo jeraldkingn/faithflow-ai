@@ -16,7 +16,7 @@ VIDEO_WIDTH = 1080
 VIDEO_HEIGHT = 1920
 FONT_SIZE = 80
 LINE_SPACING = 12
-DEFAULT_DURATION = 2.5
+DEFAULT_DURATION = 3
 TEXT_Y_OFFSET = -100
 
 # Watermark configuration
@@ -94,9 +94,10 @@ def create_scene(text, output, duration=DEFAULT_DURATION):
 
     cmd = [
         "ffmpeg",
-        "-f", "lavfi",
-        "-i", f"color=c=black:s={video_size}:d={duration}",
-        "-vf", drawtext_filter,
+        "-loop", "1",
+        "-i", "bg.jpg",
+        "-t", str(duration),
+        "-vf", f"zoompan=z='min(zoom+0.0015,1.1)':d=75:fps=25,scale={VIDEO_WIDTH}:{VIDEO_HEIGHT},boxblur=10:1,{drawtext_filter}",
         "-y",
         output
     ]
@@ -227,10 +228,13 @@ def main():
         "-f", "concat",
         "-safe", "0",
         "-i", FILE_LIST_FILE,
+        "-i", "audio.mp3",
         "-c:v", "libx264",
         "-c:a", "aac",
+        "-shortest",
+        "-y",
         output_filename
-    ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    ]), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
     if result.returncode != 0:
         print("❌ FFmpeg error during concat:")

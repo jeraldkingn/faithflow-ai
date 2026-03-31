@@ -1,6 +1,8 @@
 name: Generate Video
 
 on:
+  schedule:
+    - cron: "0 2,6,10,14,18 * * *"   # 5 times a day
   workflow_dispatch:
 
 jobs:
