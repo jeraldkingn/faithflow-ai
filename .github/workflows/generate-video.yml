@@ -40,6 +40,7 @@ jobs:
           LINE_3: ${{ github.event.inputs.line3 }}
           LINE_4: ${{ github.event.inputs.line4 }}
           LINE_5: ${{ github.event.inputs.line5 }}
+          YOUTUBE_TOKEN: ${{ secrets.YOUTUBE_TOKEN }}
         run: python main.py
 
       - name: 📤 Upload video

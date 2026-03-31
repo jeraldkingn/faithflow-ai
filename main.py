@@ -2,9 +2,13 @@ import json
 import os
 import subprocess
 from datetime import datetime
-from wsgiref import headers
 import gspread
+import time
 from google.oauth2.service_account import Credentials
+import base64
+import pickle
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
 
 # Configuration constants
 FONT_PATH = os.path.abspath("font.ttf")
@@ -56,7 +60,8 @@ def create_scene(text, output, duration=DEFAULT_DURATION):
         duration: Duration of the video in seconds (default: 3)
     """
     # Write text to temporary file for ffmpeg processing
-    with open(TEMP_TEXT_FILE, "w", encoding="utf-8") as f:
+    temp_file = f"temp_{output}.txt"
+    with open(temp_file, "w", encoding="utf-8") as f:
         f.write(text)
 
     # Build ffmpeg command to create text overlay video
@@ -64,7 +69,7 @@ def create_scene(text, output, duration=DEFAULT_DURATION):
     # Main text
     main_text_filter = (
         f"drawtext=fontfile={FONT_PATH}:"
-        f"textfile={TEMP_TEXT_FILE}:"
+        f"textfile={temp_file}:"
         f"fontcolor=white:"
         f"fontsize={FONT_SIZE}:"
         f"line_spacing={LINE_SPACING}:"
@@ -108,6 +113,54 @@ def create_scene(text, output, duration=DEFAULT_DURATION):
     if not os.path.exists(output):
         print(f"❌ Failed to create {output}")
         exit()
+    
+    # Clean up temporary text file
+    if os.path.exists(temp_file):
+        os.remove(temp_file)
+
+from google.auth.transport.requests import Request
+
+def upload_to_youtube(video_file, title):
+    print("📤 Uploading to YouTube...")
+
+    token_env = os.getenv("YOUTUBE_TOKEN")
+
+    if not token_env:
+        print("❌ YOUTUBE_TOKEN not found")
+        return
+
+    token_data = base64.b64decode(token_env)
+
+    with open("token.pickle", "wb") as f:
+        f.write(token_data)
+
+    with open("token.pickle", "rb") as f:
+        creds = pickle.load(f)
+
+    # 🔥 Refresh token if expired
+    if creds and creds.expired and creds.refresh_token:
+        creds.refresh(Request())
+
+    youtube = build("youtube", "v3", credentials=creds)
+
+    request = youtube.videos().insert(
+        part="snippet,status",
+        body={
+            "snippet": {
+                "title": f"{title}... ❤️ #shorts",
+                "description": "Follow @faithflow 🙏\n#shorts #faith #jesus",
+                "tags": ["faith", "jesus", "motivation", "shorts"],
+                "categoryId": "22"
+            },
+            "status": {
+                "privacyStatus": "public"
+            }
+        },
+        media_body=MediaFileUpload(video_file)
+    )
+
+    response = request.execute()
+    print("✅ Uploaded:", response["id"])
 
 def get_scenes_from_sheet():
     scope = [
@@ -185,10 +238,16 @@ def main():
         exit()
 
     print("✅ Video generated successfully!")
+    time.sleep(2)
+    upload_to_youtube(output_filename, scenes[0])
     
     # Mark row as done in sheet
     headers = sheet.row_values(1)
-    status_col = headers.index("Status") + 1
+    if "Status" in headers:
+        status_col = headers.index("Status") + 1
+        sheet.update_cell(row_index, status_col, "DONE")
+    else:
+        print("⚠️ Status column not found")
     sheet.update_cell(row_index, status_col, "DONE")
 
     # Step 4: Clean up temporary files
