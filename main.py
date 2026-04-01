@@ -162,33 +162,15 @@ from google.auth.transport.requests import Request
 
 def upload_to_youtube(video_file, title):
     """
-    Upload video to YouTube with error handling.
-    
-    Args:
-        video_file: Path to the video file
-        title: Title for the video
-        
-    Returns:
-        bool: True if upload successful, False otherwise
+    Upload video to YouTube with OAuth credentials.
     """
     print("Uploading to YouTube...")
 
-    token_env = os.getenv("YOUTUBE_TOKEN")
-    if not token_env:
-        print("YOUTUBE_TOKEN not found")
-        return False
-
     try:
-        token_data = base64.b64decode(token_env)
-        with open("token.pickle", "wb") as f:
-            f.write(token_data)
-
-        with open("token.pickle", "rb") as f:
-            creds = pickle.load(f)
-
-        # Refresh token if expired
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
+        creds = get_oauth_creds()
+        if not creds:
+            print("❌ Failed to load OAuth credentials")
+            return False
 
         youtube = build("youtube", "v3", credentials=creds)
 
@@ -198,7 +180,14 @@ def upload_to_youtube(video_file, title):
                 "snippet": {
                     "title": f"{title}... #shorts",
                     "description": "Follow @faithflow-in-jesus 🙏\n#shorts #faith #jesus #christian #bible #prayer #worship #god #holyspirit #scripture #gospel #salvation #hope #love #church #ministry #inspiration #spiritual #christ #amen #blessed #motivation",
-                    "tags": ["faith", "jesus", "christian", "bible", "prayer", "worship", "god", "holy spirit", "scripture", "gospel", "salvation", "christianity", "hope", "love", "church", "ministry", "inspiration", "spiritual", "religion", "christ", "amen", "blessed", "motivation", "shorts"],
+                    "tags": [
+                        "faith", "jesus", "christian", "bible", "prayer",
+                        "worship", "god", "holy spirit", "scripture",
+                        "gospel", "salvation", "christianity", "hope",
+                        "love", "church", "ministry", "inspiration",
+                        "spiritual", "religion", "christ", "amen",
+                        "blessed", "motivation", "shorts"
+                    ],
                     "categoryId": "22"
                 },
                 "status": {
@@ -209,31 +198,53 @@ def upload_to_youtube(video_file, title):
         )
 
         response = request.execute()
-        print("Uploaded:", response["id"])
+        print("✅ Uploaded:", response["id"])
         return True
-        
+
     except HttpError as e:
         if "uploadLimitExceeded" in str(e):
-            print("YouTube upload quota exceeded. Video not uploaded.")
+            print("⚠️ YouTube upload quota exceeded")
         else:
-            print(f"YouTube upload failed: {e}")
+            print(f"❌ YouTube upload failed: {e}")
         return False
+
     except Exception as e:
-        print(f"Unexpected error during upload: {e}")
+        print(f"❌ Unexpected error: {e}")
         return False
+
+def get_oauth_creds():
+    token_env = os.getenv("YOUTUBE_TOKEN")
+    
+    if not token_env:
+        print("Missing OAuth token")
+        return None
+
+    token_data = base64.b64decode(token_env)
+
+    with open("token.pickle", "wb") as f:
+        f.write(token_data)
+
+    with open("token.pickle", "rb") as f:
+        creds = pickle.load(f)
+
+    if creds and creds.expired and creds.refresh_token:
+        creds.refresh(Request())
+
+    if not creds.valid:
+        print("❌ Invalid credentials")
+        return None
+
+    return creds
 
 def upload_to_drive(file_path):
     try:
         print("Uploading to Google Drive...")
 
-        scope = ["https://www.googleapis.com/auth/drive"]
-        creds = Credentials.from_service_account_file("credentials.json", scopes=scope)
-
+        creds = get_oauth_creds()
         drive_service = build("drive", "v3", credentials=creds)
 
         file_metadata = {
-            "name": os.path.basename(file_path),
-            "parents": [FOLDER_ID]
+            "name": os.path.basename(file_path)
         }
 
         media = MediaFileUpload(file_path, mimetype="video/mp4")
@@ -245,7 +256,6 @@ def upload_to_drive(file_path):
         ).execute()
 
         print("Uploaded to Drive:", file.get("webViewLink"))
-        
         return file.get("webViewLink")
 
     except Exception as e:
