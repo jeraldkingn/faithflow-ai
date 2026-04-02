@@ -86,20 +86,35 @@ def create_full_video(lines, output):
         start = i * 3
         end = start + 3
 
-        safe_text = text.replace("'", "\\'").replace(":", "\\:")
+        split_lines = text.split("\n")
 
-        filter_text = (
-            f"drawtext=fontfile={FONT_PATH}:"
-            f"text='{safe_text}':"
-            f"fontcolor=white:"
-            f"fontsize={FONT_SIZE}:"
-            f"line_spacing={LINE_SPACING}:"
-            f"x=(w-text_w)/2:"
-            f"y=(h-text_h)/2:"
-            f"enable='between(t,{start},{end})':alpha='if(lt(t,{start}+0.5),(t-{start})/0.5,1)'"
-        )
+        total_lines = len(split_lines)
+        line_height = FONT_SIZE + LINE_SPACING
+        total_text_height = total_lines * line_height - LINE_SPACING
 
-        drawtext_filters.append(filter_text)
+        start_y = (VIDEO_HEIGHT - total_text_height) / 2 + TEXT_Y_OFFSET
+
+        for j, line in enumerate(split_lines):
+            if not line.strip():
+                continue
+
+            safe_line = (
+                line.replace("'", "\\'")
+                    .replace(":", "\\:")
+            )
+
+            y_position = start_y + j * line_height
+
+            drawtext_filters.append(
+                f"drawtext=fontfile={FONT_PATH}:"
+                f"text='{safe_line}':"
+                f"fontcolor=white:"
+                f"fontsize={FONT_SIZE}:"
+                f"x=(w-text_w)/2:"  # ✅ TRUE center per line
+                f"y={y_position}:"
+                f"enable='between(t,{start},{end})':alpha='if(lt(t,{start}+0.5),(t-{start})/0.5,1)'"
+                f"alpha='if(lt(t,{start}+0.4),(t-{start})/0.4,1)'"
+            )
 
     # Watermark
     safe_watermark = WATERMARK_TEXT.replace("'", "\\'")
