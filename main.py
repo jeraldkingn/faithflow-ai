@@ -137,9 +137,10 @@ def create_scene(text, output, duration=DEFAULT_DURATION, start_time=0):
 
     cmd = [
         "ffmpeg",
-        "-ss", str(start_time),
         "-i", "bg.mp4",  # 🎬 your 15 sec video
+        "-ss", str(start_time),
         "-t", str(duration),  # optional trim
+        "-avoid_negative_ts", "make_zero",
         "-vf", f"scale={VIDEO_WIDTH}:{VIDEO_HEIGHT}:force_original_aspect_ratio=increase,crop={VIDEO_WIDTH}:{VIDEO_HEIGHT},boxblur=10:1,{drawtext_filter}",
         "-y",
         output
