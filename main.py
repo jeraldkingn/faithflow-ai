@@ -79,46 +79,28 @@ def get_user_scenes():
 
     return scenes
 
-def create_scene(text, output, duration=DEFAULT_DURATION, start_time=0):
-    """
-    Create a vertical video scene with text overlay on a black background.
-    
-    Args:
-        text: The text to display in the scene
-        output: Output video file path
-        duration: Duration of the video in seconds (default: 3)
-    """
-    # Split text into lines for individual centering
-    lines = text.split('\n')
-    
-    # Build ffmpeg command to create text overlay video
-    video_size = f"{VIDEO_WIDTH}x{VIDEO_HEIGHT}"
-    
-    # Create drawtext filters for each line, each centered individually
+def create_full_video(lines, output):
     drawtext_filters = []
-    
-    # Calculate starting Y position to center the entire block vertically
-    total_lines = len(lines)
-    line_height = FONT_SIZE + LINE_SPACING
-    total_text_height = total_lines * line_height - LINE_SPACING  # Subtract extra spacing
-    start_y = (VIDEO_HEIGHT - total_text_height) / 2 + TEXT_Y_OFFSET
-    
-    for i, line in enumerate(lines):
-        if line.strip():  # Only add non-empty lines
-            safe_line = line.replace("'", "\\'").replace(":", "\\:")
-            y_position = start_y + i * line_height
-            line_filter = (
-                f"drawtext=fontfile={FONT_PATH}:"
-                f"text='{safe_line}':"
-                f"fontcolor=white:"
-                f"fontsize={FONT_SIZE}:" 
-                f"x=(w-text_w)/2:"
-                f"y={y_position}"
-            )
-            drawtext_filters.append(line_filter)
 
-    # Join all line filters with commas
-    main_text_filter = ",".join(drawtext_filters)
+    for i, text in enumerate(lines):
+        start = i * 3
+        end = start + 3
+
+        safe_text = text.replace("'", "\\'").replace(":", "\\:").replace("\n", "\\n")
+
+        filter_text = (
+            f"drawtext=fontfile={FONT_PATH}:"
+            f"text='{safe_text}':"
+            f"fontcolor=white:"
+            f"fontsize={FONT_SIZE}:"
+            f"line_spacing={LINE_SPACING}:"
+            f"x=(w-text_w)/2:"
+            f"borderw=3:bordercolor=black:"
+            f"y=(h-text_h)/2:"
+            f"enable='between(t,{start},{end})':alpha='if(lt(t,{start}+0.5),(t-{start})/0.5,1)'"
+        )
+
+        drawtext_filters.append(filter_text)
 
     # Watermark
     safe_watermark = WATERMARK_TEXT.replace("'", "\\'")
@@ -128,37 +110,35 @@ def create_scene(text, output, duration=DEFAULT_DURATION, start_time=0):
         f"text='{safe_watermark}':"
         f"fontcolor={WATERMARK_FONTCOLOR}:"
         f"fontsize={WATERMARK_FONTSIZE}:"
-        f"shadowcolor={WATERMARK_SHADOWCOLOR}:shadowx={WATERMARK_SHADOWX}:shadowy={WATERMARK_SHADOWY}:"
         f"x=(w-text_w)/2:"
         f"y=h-{WATERMARK_Y_OFFSET}"
     )
 
-    drawtext_filter = f"{main_text_filter},{watermark_filter}"
+    drawtext_filters.append(watermark_filter)
+
+    final_filter = ",".join(drawtext_filters)
 
     cmd = [
         "ffmpeg",
-        "-i", "bg.mp4",  # 🎬 your 15 sec video
-        "-ss", str(start_time),
-        "-t", str(duration),  # optional trim
-        "-avoid_negative_ts", "make_zero",
-        "-vf", f"scale={VIDEO_WIDTH}:{VIDEO_HEIGHT}:force_original_aspect_ratio=increase,crop={VIDEO_WIDTH}:{VIDEO_HEIGHT},boxblur=10:1,{drawtext_filter}",
+        "-i", "bg.mp4",
+        "-i", "audio.mp3",
+        "-t", "15",
+        "-vf",
+        f"scale={VIDEO_WIDTH}:{VIDEO_HEIGHT}:force_original_aspect_ratio=increase,"
+        f"crop={VIDEO_WIDTH}:{VIDEO_HEIGHT},"
+        f"boxblur=10:1,"
+        f"{final_filter}",
         "-y",
         output
     ]
 
-    print(f"\nCreating scene: {output}")
     result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
     if result.returncode != 0:
         print("FFmpeg error:")
         print(result.stderr.decode())
-        exit()
-
-    # Verify the scene was created successfully
-    if not os.path.exists(output):
-        print(f"Failed to create {output}")
-        exit()
-
+        raise Exception("Video generation failed")
+    
 from google.auth.transport.requests import Request
 
 def upload_to_youtube(video_file, title):
@@ -309,97 +289,6 @@ def get_next_scenes():
     
     return None, None, None
 
-def generate_scenes_parallel(scenes):
-    """Generate individual scene video files in parallel for better performance."""
-    scene_files = []
-    try:
-        # Use ThreadPoolExecutor for parallel FFmpeg execution
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            # Submit all scene generation tasks
-            future_to_index = {
-                executor.submit(create_scene, text, f"scene_{i}.mp4"): i 
-                for i, text in enumerate(scenes[:5])
-            }
-            
-            # Collect results as they complete
-            for future in as_completed(future_to_index):
-                index = future_to_index[future]
-                try:
-                    future.result()  # Will raise exception if scene creation failed
-                    scene_files.append(f"scene_{index}.mp4")
-                    print(f"✓ Scene {index} completed")
-                except Exception as e:
-                    print(f"✗ Scene {index} failed: {e}")
-                    raise  # Re-raise to stop processing
-        
-        print(f"\n🚀 Generated {len(scene_files)} scenes in parallel")
-        return sorted(scene_files)  # Sort to maintain order
-    except Exception as e:
-        print(f"❌ Error in parallel scene generation: {e}")
-        return None
-
-def generate_scenes(scenes):
-    """Generate individual scene video files (fallback to sequential if parallel fails)."""
-    print(f"\n🎬 Generating {len(scenes[:5])} video scenes...")
-    
-    # Try parallel generation first
-    result = generate_scenes_parallel(scenes)
-    if result:
-        return result
-    
-    # Fallback to sequential generation
-    print("⚠️ Parallel generation failed, falling back to sequential...")
-    scene_files = []
-    try:
-        for i, text in enumerate(scenes[:5]):
-            filename = f"scene_{i}.mp4"
-            create_scene(text, filename)
-            scene_files.append(filename)
-        
-        print(f"✅ Generated {len(scene_files)} scenes (sequential)")
-        return scene_files
-    except Exception as e:
-        print(f"❌ Error generating scenes: {e}")
-        return None
-
-def combine_scenes(scene_files):
-    """Combine scene files into final video."""
-    try:
-        # Create file list for ffmpeg
-        with open(FILE_LIST_FILE, "w") as f:
-            for file in scene_files:
-                f.write(f"file '{file}'\n")
-
-        # Generate output filename
-        output_filename = os.path.join(OUTPUT_FOLDER, f"output_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4")
-        print(f"\n🎥 Merging scenes into: {output_filename}")
-        
-        # Combine videos
-        result = subprocess.run([
-            "ffmpeg",
-            "-f", "concat",
-            "-safe", "0",
-            "-i", FILE_LIST_FILE,
-            "-i", "audio.mp3",
-            "-c:v", "libx264",
-            "-c:a", "aac",
-            "-af", "apad",
-            "-shortest",
-            "-y",
-            output_filename
-        ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-        if result.returncode != 0:
-            print("FFmpeg error during concat:")
-            print(result.stderr.decode())
-            return None
-
-        print("Video generated successfully!")
-        return output_filename
-    except Exception as e:
-        print(f"Error combining scenes: {e}")
-        return None
-
 def upload_and_update_status(output_filename, scenes, row_index, sheet):
     """Upload video to YouTube and update sheet status. Falls back to Drive upload."""
     try:
@@ -475,49 +364,34 @@ def main():
         return
     
     # Use context manager for automatic cleanup
-    with video_generation_context() as temp_files:
+    with video_generation_context():
         try:
-            # Generate individual scenes
-            scene_files = generate_scenes(scenes)
-            if scene_files:
-                temp_files.extend(scene_files)  # Track for cleanup
-            
-            if not scene_files:
-                # Reset status on failure
-                try:
-                    sheet.update_cell(row_index, status_col, "")
-                    print("🔄 Status reset due to scene generation failure")
-                except:
-                    pass
-                return
-            
-            # Combine into final video
-            output_filename = combine_scenes(scene_files)
-            if not output_filename:
-                # Reset status on failure
-                try:
-                    sheet.update_cell(row_index, status_col, "")
-                    print("🔄 Status reset due to video combination failure")
-                except:
-                    pass
-                return
-            
-            # Upload and update status
-            upload_success = upload_and_update_status(output_filename, scenes, row_index, sheet)
-            
-            if upload_success:
-                print("🎉 Video processing completed successfully!")
-            else:
-                print("⚠️ Video generated but upload failed. Check quota limits.")
-                
-        except Exception as e:
-            print(f"💥 Unexpected error during processing: {e}")
-            # Reset status on unexpected error
-            try:
+            print("🎬 Creating full video...")
+
+            output_filename = os.path.join(
+                OUTPUT_FOLDER,
+                f"output_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4"
+            )
+
+            create_full_video(scenes, output_filename)
+
+            if not os.path.exists(output_filename):
+                print("❌ Video generation failed")
                 sheet.update_cell(row_index, status_col, "")
-                print("🔄 Status reset due to unexpected error")
-            except:
-                pass
+                return
+
+            upload_success = upload_and_update_status(
+                output_filename, scenes, row_index, sheet
+            )
+
+            if upload_success:
+                print("🎉 Done!")
+            else:
+                print("⚠️ Upload failed")
+
+        except Exception as e:
+            print(f"💥 Error: {e}")
+            sheet.update_cell(row_index, status_col, "")
 
 if __name__ == "__main__":
     main()
