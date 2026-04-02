@@ -79,7 +79,7 @@ def get_user_scenes():
 
     return scenes
 
-def create_scene(text, output, duration=DEFAULT_DURATION):
+def create_scene(text, output, duration=DEFAULT_DURATION, start_time=0):
     """
     Create a vertical video scene with text overlay on a black background.
     
@@ -137,6 +137,7 @@ def create_scene(text, output, duration=DEFAULT_DURATION):
 
     cmd = [
         "ffmpeg",
+        "-ss", str(start_time),
         "-i", "bg.mp4",  # 🎬 your 15 sec video
         "-t", str(duration),  # optional trim
         "-vf", f"scale={VIDEO_WIDTH}:{VIDEO_HEIGHT}:force_original_aspect_ratio=increase,crop={VIDEO_WIDTH}:{VIDEO_HEIGHT},boxblur=10:1,{drawtext_filter}",
@@ -165,51 +166,53 @@ def upload_to_youtube(video_file, title):
     """
     print("Uploading to YouTube...")
 
-    try:
-        creds = get_oauth_creds()
-        if not creds:
-            print("❌ Failed to load OAuth credentials")
-            return False
+    return True;
 
-        youtube = build("youtube", "v3", credentials=creds)
+    # try:
+    #     creds = get_oauth_creds()
+    #     if not creds:
+    #         print("❌ Failed to load OAuth credentials")
+    #         return False
 
-        request = youtube.videos().insert(
-            part="snippet,status",
-            body={
-                "snippet": {
-                    "title": f"{title}... #shorts",
-                    "description": "Follow @faithflow-in-jesus 🙏\n#shorts #faith #jesus #christian #bible #prayer #worship #god #holyspirit #scripture #gospel #salvation #hope #love #church #ministry #inspiration #spiritual #christ #amen #blessed #motivation",
-                    "tags": [
-                        "faith", "jesus", "christian", "bible", "prayer",
-                        "worship", "god", "holy spirit", "scripture",
-                        "gospel", "salvation", "christianity", "hope",
-                        "love", "church", "ministry", "inspiration",
-                        "spiritual", "religion", "christ", "amen",
-                        "blessed", "motivation", "shorts"
-                    ],
-                    "categoryId": "22"
-                },
-                "status": {
-                    "privacyStatus": "public"
-                }
-            },
-            media_body=MediaFileUpload(video_file)
-        )
+    #     youtube = build("youtube", "v3", credentials=creds)
 
-        response = request.execute()
-        print("✅ Uploaded:", response["id"])
-        return True
+    #     request = youtube.videos().insert(
+    #         part="snippet,status",
+    #         body={
+    #             "snippet": {
+    #                 "title": f"{title}... #shorts",
+    #                 "description": "Follow @faithflow-in-jesus 🙏\n#shorts #faith #jesus #christian #bible #prayer #worship #god #holyspirit #scripture #gospel #salvation #hope #love #church #ministry #inspiration #spiritual #christ #amen #blessed #motivation",
+    #                 "tags": [
+    #                     "faith", "jesus", "christian", "bible", "prayer",
+    #                     "worship", "god", "holy spirit", "scripture",
+    #                     "gospel", "salvation", "christianity", "hope",
+    #                     "love", "church", "ministry", "inspiration",
+    #                     "spiritual", "religion", "christ", "amen",
+    #                     "blessed", "motivation", "shorts"
+    #                 ],
+    #                 "categoryId": "22"
+    #             },
+    #             "status": {
+    #                 "privacyStatus": "public"
+    #             }
+    #         },
+    #         media_body=MediaFileUpload(video_file)
+    #     )
 
-    except HttpError as e:
-        if "uploadLimitExceeded" in str(e):
-            print("⚠️ YouTube upload quota exceeded")
-        else:
-            print(f"❌ YouTube upload failed: {e}")
-        return False
+    #     response = request.execute()
+    #     print("✅ Uploaded:", response["id"])
+    #     return True
 
-    except Exception as e:
-        print(f"❌ Unexpected error: {e}")
-        return False
+    # except HttpError as e:
+    #     if "uploadLimitExceeded" in str(e):
+    #         print("⚠️ YouTube upload quota exceeded")
+    #     else:
+    #         print(f"❌ YouTube upload failed: {e}")
+    #     return False
+
+    # except Exception as e:
+    #     print(f"❌ Unexpected error: {e}")
+    #     return False
 
 def get_oauth_creds():
     token_env = os.getenv("YOUTUBE_TOKEN")
