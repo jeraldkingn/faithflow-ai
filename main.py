@@ -85,36 +85,23 @@ def create_full_video(lines, output):
     for i, text in enumerate(lines):
         start = i * 3
         end = start + 3
+        
+        lines_count = text.count("\n") + 1
 
-        split_lines = text.split("\n")
+        safe_text = text.replace("'", "\\'").replace(":", "\\:")
 
-        total_lines = len(split_lines)
-        line_height = FONT_SIZE + LINE_SPACING
-        total_text_height = total_lines * line_height - LINE_SPACING
+        filter_text = (
+            f"drawtext=fontfile={FONT_PATH}:"
+            f"text='{safe_text}':"
+            f"fontcolor=white:"
+            f"fontsize={FONT_SIZE}:"
+            f"line_spacing={LINE_SPACING}:"
+            f"x=(w-text_w)/2:"
+            f"y=(h-text_h)/2 - (({lines_count}-1)*{LINE_SPACING}/2):"
+            f"enable='between(t,{start},{end})':alpha='if(lt(t,{start}+0.5),(t-{start})/0.5,1)'"
+        )
 
-        start_y = (VIDEO_HEIGHT - total_text_height) / 2 + TEXT_Y_OFFSET
-
-        for j, line in enumerate(split_lines):
-            if not line.strip():
-                continue
-
-            safe_line = (
-                line.replace("'", "\\'")
-                    .replace(":", "\\:")
-            )
-
-            y_position = start_y + j * line_height
-
-            drawtext_filters.append(
-                f"drawtext=fontfile={FONT_PATH}:"
-                f"text='{safe_line}':"
-                f"fontcolor=white:"
-                f"fontsize={FONT_SIZE}:"
-                f"x=(w-text_w)/2:"  # ✅ TRUE center per line
-                f"y={y_position}:"
-                f"enable='between(t,{start},{end})':alpha='if(lt(t,{start}+0.5),(t-{start})/0.5,1)'"
-                f"alpha='if(lt(t,{start}+0.4),(t-{start})/0.4,1)'"
-            )
+        drawtext_filters.append(filter_text)
 
     # Watermark
     safe_watermark = WATERMARK_TEXT.replace("'", "\\'")
