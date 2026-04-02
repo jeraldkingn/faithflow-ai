@@ -85,8 +85,6 @@ def create_full_video(lines, output):
     for i, text in enumerate(lines):
         start = i * 3
         end = start + 3
-        
-        lines_count = text.count("\n") + 1
 
         safe_text = text.replace("'", "\\'").replace(":", "\\:")
 
@@ -96,8 +94,9 @@ def create_full_video(lines, output):
             f"fontcolor=white:"
             f"fontsize={FONT_SIZE}:"
             f"line_spacing={LINE_SPACING}:"
+            f"text_align=center:"
             f"x=(w-text_w)/2:"
-            f"y=(h-text_h)/2 - (({lines_count}-1)*{LINE_SPACING}/2):"
+            f"y=(h-text_h)/2:"
             f"enable='between(t,{start},{end})':alpha='if(lt(t,{start}+0.5),(t-{start})/0.5,1)'"
         )
 
