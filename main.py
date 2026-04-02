@@ -86,7 +86,7 @@ def create_full_video(lines, output):
         start = i * 3
         end = start + 3
 
-        safe_text = text.replace("'", "\\'").replace(":", "\\:").replace("\n", "\\n")
+        safe_text = text.replace("'", "\\'").replace(":", "\\:")
 
         filter_text = (
             f"drawtext=fontfile={FONT_PATH}:"
@@ -95,7 +95,6 @@ def create_full_video(lines, output):
             f"fontsize={FONT_SIZE}:"
             f"line_spacing={LINE_SPACING}:"
             f"x=(w-text_w)/2:"
-            f"borderw=3:bordercolor=black:"
             f"y=(h-text_h)/2:"
             f"enable='between(t,{start},{end})':alpha='if(lt(t,{start}+0.5),(t-{start})/0.5,1)'"
         )
