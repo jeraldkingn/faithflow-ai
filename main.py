@@ -147,8 +147,6 @@ def upload_to_youtube(video_file, title):
     """
     print("Uploading to YouTube...")
 
-    return True;
-
     try:
         creds = get_oauth_creds()
         if not creds:
