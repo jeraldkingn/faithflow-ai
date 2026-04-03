@@ -146,57 +146,58 @@ def upload_to_youtube(video_file, title, hashtags, bibleverse):
     Upload video to YouTube with OAuth credentials.
     """
     print("Uploading to YouTube...")
+    return True;
 
-    formatted_tags = " ".join(
-    [f"#{tag.strip()}" for tag in hashtags.split(",") if tag.strip()]
-    )
+    # formatted_tags = " ".join(
+    # [f"#{tag.strip()}" for tag in hashtags.split(",") if tag.strip()]
+    # )
 
-    description = (
-        f"{bibleverse}\n\n"
-        f"Follow @faithflow-in-jesus 🙏\n\n"
-        f"{formatted_tags}"
-    )
+    # description = (
+    #     f"{bibleverse}\n\n"
+    #     f"Follow @faithflow-in-jesus 🙏\n\n"
+    #     f"{formatted_tags}"
+    # )
 
-    try:
-        creds = get_oauth_creds()
-        if not creds:
-            print("❌ Failed to load OAuth credentials")
-            return False
+    # try:
+    #     creds = get_oauth_creds()
+    #     if not creds:
+    #         print("❌ Failed to load OAuth credentials")
+    #         return False
 
-        youtube = build("youtube", "v3", credentials=creds)
+    #     youtube = build("youtube", "v3", credentials=creds)
 
-        request = youtube.videos().insert(
-            part="snippet,status",
-            body={
-                "snippet": {
-                    "title": f"{title} | {bibleverse[:50]}... #shorts",
-                    "description": description,
-                    "tags": [
-                        "faith", "shorts", "jesus", "healing", "trust god"
-                    ],
-                    "categoryId": "22"
-                },
-                "status": {
-                    "privacyStatus": "public"
-                }
-            },
-            media_body=MediaFileUpload(video_file)
-        )
+    #     request = youtube.videos().insert(
+    #         part="snippet,status",
+    #         body={
+    #             "snippet": {
+    #                 "title": f"{title} | {bibleverse[:50]}... #shorts",
+    #                 "description": description,
+    #                 "tags": [
+    #                     "faith", "shorts", "jesus", "healing", "trust god"
+    #                 ],
+    #                 "categoryId": "22"
+    #             },
+    #             "status": {
+    #                 "privacyStatus": "public"
+    #             }
+    #         },
+    #         media_body=MediaFileUpload(video_file)
+    #     )
 
-        response = request.execute()
-        print("✅ Uploaded:", response["id"])
-        return True
+    #     response = request.execute()
+    #     print("✅ Uploaded:", response["id"])
+    #     return True
 
-    except HttpError as e:
-        if "uploadLimitExceeded" in str(e):
-            print("⚠️ YouTube upload quota exceeded")
-        else:
-            print(f"❌ YouTube upload failed: {e}")
-        return False
+    # except HttpError as e:
+    #     if "uploadLimitExceeded" in str(e):
+    #         print("⚠️ YouTube upload quota exceeded")
+    #     else:
+    #         print(f"❌ YouTube upload failed: {e}")
+    #     return False
 
-    except Exception as e:
-        print(f"❌ Unexpected error: {e}")
-        return False
+    # except Exception as e:
+    #     print(f"❌ Unexpected error: {e}")
+    #     return False
 
 def get_oauth_creds():
     token_env = os.getenv("YOUTUBE_TOKEN")
