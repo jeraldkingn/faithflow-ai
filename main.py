@@ -141,11 +141,21 @@ def create_full_video(lines, output):
     
 from google.auth.transport.requests import Request
 
-def upload_to_youtube(video_file, title):
+def upload_to_youtube(video_file, title, hashtags, bibleverse):
     """
     Upload video to YouTube with OAuth credentials.
     """
     print("Uploading to YouTube...")
+
+    formatted_tags = " ".join(
+    [f"#{tag.strip()}" for tag in hashtags.split(",") if tag.strip()]
+    )
+
+    description = (
+        f"{bibleverse}\n\n"
+        f"Follow @faithflow-in-jesus 🙏\n\n"
+        f"{formatted_tags}"
+    )
 
     try:
         creds = get_oauth_creds()
@@ -159,15 +169,10 @@ def upload_to_youtube(video_file, title):
             part="snippet,status",
             body={
                 "snippet": {
-                    "title": f"{title}... #shorts",
-                    "description": "Follow @faithflow-in-jesus 🙏\n#shorts #faith #jesus #christian #bible #prayer #worship #god #holyspirit #scripture #gospel #salvation #hope #love #church #ministry #inspiration #spiritual #christ #amen #blessed #motivation",
+                    "title": f"{title} | {bibleverse[:50]}... #shorts",
+                    "description": description,
                     "tags": [
-                        "faith", "jesus", "christian", "bible", "prayer",
-                        "worship", "god", "holy spirit", "scripture",
-                        "gospel", "salvation", "christianity", "hope",
-                        "love", "church", "ministry", "inspiration",
-                        "spiritual", "religion", "christ", "amen",
-                        "blessed", "motivation", "shorts"
+                        "faith", "shorts", "jesus", "healing", "trust god"
                     ],
                     "categoryId": "22"
                 },
@@ -276,24 +281,28 @@ def get_next_scenes():
                     row.get("Message", ""),
                     row.get("Ending", "")
                 ]
+
+                hashtags = row.get("Hashtags", "")
+                bibleverse = row.get("Bibleverse", "")
+
                 # Convert literal \n and /n to actual newlines
                 scenes = [text.replace("\\n", "\n").replace("/n", "\n") for text in scenes]
                 # Avoid empty scenes
                 scenes = [s if s.strip() else "..." for s in scenes]
-                return i + 2, scenes, sheet  # row index + data
+                return i + 2, scenes,hashtags,bibleverse, sheet  # row index + data
     except Exception as e:
         print(f"Error accessing Google Sheets: {e}")
         return None, None, None
     
     return None, None, None
 
-def upload_and_update_status(output_filename, scenes, row_index, sheet):
+def upload_and_update_status(output_filename, scenes, hashtags, bibleverse, row_index, sheet):
     """Upload video to YouTube and update sheet status. Falls back to Drive upload."""
     try:
         time.sleep(2)  # Brief pause before upload
         
         drive_link = None
-        upload_success = upload_to_youtube(output_filename, scenes[0])
+        upload_success = upload_to_youtube(output_filename, scenes[0], hashtags, bibleverse)
 
         if not upload_success:
             print("YouTube failed → uploading to Drive")
@@ -341,7 +350,7 @@ def main():
         return
     
     # Get next scenes from sheet
-    row_index, scenes, sheet = get_next_scenes()
+    row_index, scenes, hashtags, bibleverse, sheet = get_next_scenes()
     if not scenes:
         print("ℹ️ No new scenes to process")
         return
@@ -379,7 +388,7 @@ def main():
                 return
 
             upload_success = upload_and_update_status(
-                output_filename, scenes, row_index, sheet
+                output_filename, scenes, hashtags, bibleverse, row_index, sheet
             )
 
             if upload_success:
