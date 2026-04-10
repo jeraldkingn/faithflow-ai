@@ -301,9 +301,9 @@ def get_next_scenes():
                 return i + 2, scenes,hashtags,bibleverse, sheet  # row index + data
     except Exception as e:
         print(f"Error accessing Google Sheets: {e}")
-        return None, None, None
+        return None, None, None, None, None
     
-    return None, None, None
+    return None, None, None, None, None
 
 def upload_and_update_status(output_filename, scenes, hashtags, bibleverse, row_index, sheet):
     """Upload video to YouTube and update sheet status. Falls back to Drive upload."""
