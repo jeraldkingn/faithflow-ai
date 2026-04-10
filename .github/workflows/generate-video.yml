@@ -26,12 +26,6 @@ jobs:
 
       - name: 🎬 Install ffmpeg
         run: sudo apt update && sudo apt install -y ffmpeg
-      
-      - name: 📝 Create credentials file
-        run: |
-          cat <<EOF > credentials.json
-          ${{ secrets.GOOGLE_CREDENTIALS }}
-          EOF
 
       - name: ▶️ Run video script
         env:
@@ -40,7 +34,11 @@ jobs:
           LINE_3: ${{ github.event.inputs.line3 }}
           LINE_4: ${{ github.event.inputs.line4 }}
           LINE_5: ${{ github.event.inputs.line5 }}
-          YOUTUBE_TOKEN: ${{ secrets.YOUTUBE_TOKEN }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+          OAUTH_REFRESH_TOKEN: ${{ secrets.OAUTH_REFRESH_TOKEN }}
+          GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
         run: python main.py
 
       - name: 📤 Upload video
