@@ -1,16 +1,16 @@
+import json
 import os
 import subprocess
 from datetime import datetime
 import gspread
 import time
-from google.oauth2.service_account import Credentials
-import base64
-import pickle
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from googleapiclient.errors import HttpError
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import contextlib
+from google.oauth2.service_account import Credentials as ServiceAccountCredentials
+from google.oauth2.credentials import Credentials as OAuthCredentials
 
 # Configuration constants
 FONT_PATH = os.path.abspath("font.ttf")
@@ -31,7 +31,7 @@ WATERMARK_SHADOWY = 2
 WATERMARK_Y_OFFSET = 500
 
 # Google Drive folder for uploads
-FOLDER_ID = "16GArci_d-ZZ1kOzlRq__1ZGp6lOWRfCO"
+FOLDER_ID = os.getenv("GOOGLE_DRIVE_FOLDER_ID")
 
 # Temporary files
 TEMP_TEXT_FILE = "temp.txt"
@@ -172,7 +172,7 @@ def upload_to_youtube(video_file, title, hashtags, bibleverse):
                     "title": f"{title} | {bibleverse[:50]}... #shorts",
                     "description": description,
                     "tags": [
-                        "faith", "shorts", "jesus", "healing", "trust god"
+                        "faith", "shorts", "jesus", "healing", "bible", "christian"
                     ],
                     "categoryId": "22"
                 },
@@ -197,30 +197,45 @@ def upload_to_youtube(video_file, title, hashtags, bibleverse):
     except Exception as e:
         print(f"❌ Unexpected error: {e}")
         return False
+    
 
 def get_oauth_creds():
-    token_env = os.getenv("YOUTUBE_TOKEN")
-    
-    if not token_env:
-        print("Missing OAuth token")
+    client_id = os.getenv("GOOGLE_CLIENT_ID")
+    client_secret = os.getenv("CLIENT_SECRET")
+    refresh_token = os.getenv("OAUTH_REFRESH_TOKEN")
+
+    if not all([client_id, client_secret, refresh_token]):
+        print("❌ Missing OAuth environment variables")
         return None
 
-    token_data = base64.b64decode(token_env)
+    creds = OAuthCredentials(
+        None,
+        refresh_token=refresh_token,
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=client_id,
+        client_secret=client_secret,
+        scopes=[
+            "https://www.googleapis.com/auth/youtube.upload",
+            "https://www.googleapis.com/auth/drive.file"
+        ]
+    )
 
-    with open("token.pickle", "wb") as f:
-        f.write(token_data)
-
-    with open("token.pickle", "rb") as f:
-        creds = pickle.load(f)
-
-    if creds and creds.expired and creds.refresh_token:
+    try:
         creds.refresh(Request())
+        return creds
+    except Exception as e:
+        print("❌ Token refresh failed:", e)
+        return None    
 
-    if not creds.valid:
-        print("❌ Invalid credentials")
-        return None
-
-    return creds
+def load_service_account():
+    data = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
+    return ServiceAccountCredentials.from_service_account_info(
+        json.loads(data),
+        scopes=[
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive"
+        ]
+    )
 
 def upload_to_drive(file_path):
     try:
@@ -230,7 +245,8 @@ def upload_to_drive(file_path):
         drive_service = build("drive", "v3", credentials=creds)
 
         file_metadata = {
-            "name": os.path.basename(file_path)
+            "name": os.path.basename(file_path),
+            "parents": [FOLDER_ID] if FOLDER_ID else []
         }
 
         media = MediaFileUpload(file_path, mimetype="video/mp4")
@@ -249,11 +265,7 @@ def upload_to_drive(file_path):
         return None
 
 def setup():
-    """Setup and validate environment."""
-    if not os.path.exists("credentials.json"):
-        print("credentials.json not found")
-        return False
-    
+    """Setup and validate environment."""    
     if not os.path.exists(OUTPUT_FOLDER):
         os.makedirs(OUTPUT_FOLDER)
     
@@ -262,13 +274,10 @@ def setup():
 def get_next_scenes():
     """Get the next set of scenes from Google Sheets."""
     try:
-        scope = [
-            "https://www.googleapis.com/auth/spreadsheets",
-            "https://www.googleapis.com/auth/drive"
-        ]
-        creds = Credentials.from_service_account_file("credentials.json", scopes=scope)
+        creds = load_service_account()
         client = gspread.authorize(creds)
-        sheet = client.open_by_key("1mw8hbnpAAtyna4kpM7lale04HxF4rg4tFooFT1M7VnI").sheet1
+        sheet_id = os.getenv("GOOGLE_SHEET_ID")
+        sheet = client.open_by_key(sheet_id).sheet1
         rows = sheet.get_all_records()
 
         for i, row in enumerate(rows):
