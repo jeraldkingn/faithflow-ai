@@ -362,8 +362,16 @@ def upload_and_update_status(output_filename, scenes, hashtags, bibleverse, row_
         time.sleep(2)  # Brief pause before upload
         
         drive_link = None
-        title = next((s for s in scenes if s.strip() and s != "..."), "God message for you")
+        title = next(
+            (
+                s for s in scenes
+                if s.strip() and s != "..." and len(s.strip()) > 10
+            ),
+            ""
+        ).strip()
+
         title = title.replace("\n", " ").strip()
+
         final_title = title
 
         if bibleverse:
@@ -371,6 +379,15 @@ def upload_and_update_status(output_filename, scenes, hashtags, bibleverse, row_
 
         if content_type == "shorts":
             final_title += " #shorts"
+
+        # 🚨 FINAL SAFETY CHECK
+        if not final_title or len(final_title.strip()) < 10:
+            final_title = "God has a message for you"
+
+        # Clean encoding
+        final_title = final_title.encode("utf-8", "ignore").decode("utf-8")
+
+        print("FINAL TITLE CLEAN:", repr(final_title))
 
         upload_success = upload_to_youtube(output_filename, final_title, hashtags, bibleverse)
 
