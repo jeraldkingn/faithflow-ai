@@ -356,13 +356,23 @@ def get_next_content():
 
     return None, None, None, None, None, None
 
-def upload_and_update_status(output_filename, scenes, hashtags, bibleverse, row_index, sheet):
+def upload_and_update_status(output_filename, scenes, hashtags, bibleverse, row_index, sheet, content_type):
     """Upload video to YouTube and update sheet status. Falls back to Drive upload."""
     try:
         time.sleep(2)  # Brief pause before upload
         
         drive_link = None
-        upload_success = upload_to_youtube(output_filename, scenes[0], hashtags, bibleverse)
+        title = next((s for s in scenes if s.strip() and s != "..."), "God message for you")
+        title = title.replace("\n", " ").strip()
+        final_title = title
+
+        if bibleverse:
+            final_title += f" | {bibleverse[:50]}"
+
+        if content_type == "shorts":
+            final_title += " #shorts"
+
+        upload_success = upload_to_youtube(output_filename, final_title, hashtags, bibleverse)
 
         if not upload_success:
             print("YouTube failed → uploading to Drive")
@@ -448,7 +458,7 @@ def main():
                 return
 
             upload_success = upload_and_update_status(
-                output_filename, scenes, hashtags, bibleverse, row_index, sheet
+                output_filename, scenes, hashtags, bibleverse, row_index, sheet, content_type
             )
 
             if upload_success:
