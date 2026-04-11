@@ -375,7 +375,10 @@ def upload_and_update_status(output_filename, scenes, hashtags, bibleverse, row_
         final_title = title
 
         if bibleverse:
-            final_title += f" | {bibleverse[:50]}"
+            clean_verse = bibleverse.strip().rstrip("-–— ")
+            if len(clean_verse) > 60:
+                clean_verse = clean_verse[:60].rsplit(" ", 1)[0]  # cut at word
+            final_title += f" | {clean_verse}"
 
         if content_type == "shorts":
             final_title += " #shorts"
@@ -393,14 +396,14 @@ def upload_and_update_status(output_filename, scenes, hashtags, bibleverse, row_
 
         if not upload_success:
             print("YouTube failed → uploading to Drive")
-            # drive_link = upload_to_drive(output_filename)
+            drive_link = upload_to_drive(output_filename)
 
         # Determine status based on results
         if upload_success:
             status = "DONE"
-        # elif drive_link:
-        #     print("Fallback upload to Drive successful")
-        #     status = "DRIVE"
+        elif drive_link:
+            print("Fallback upload to Drive successful")
+            status = "DRIVE"
         else:
             status = "FAILED"
         
