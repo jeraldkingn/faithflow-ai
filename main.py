@@ -393,7 +393,7 @@ def upload_and_update_status(output_filename, scenes, hashtags, bibleverse, row_
 
         if not upload_success:
             print("YouTube failed → uploading to Drive")
-            drive_link = upload_to_drive(output_filename)
+            # drive_link = upload_to_drive(output_filename)
 
         # Determine status based on results
         if upload_success:
