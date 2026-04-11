@@ -2,6 +2,7 @@ import json
 import os
 import subprocess
 from datetime import datetime
+from turtle import width
 import gspread
 import time
 from googleapiclient.discovery import build
@@ -11,11 +12,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import contextlib
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
 from google.oauth2.credentials import Credentials as OAuthCredentials
+from google.auth.transport.requests import Request
 
 # Configuration constants
 FONT_PATH = os.path.abspath("font.ttf")
-VIDEO_WIDTH = 1080
-VIDEO_HEIGHT = 1920
 FONT_SIZE = 80
 LINE_SPACING = 12
 DEFAULT_DURATION = 3
@@ -79,12 +79,23 @@ def get_user_scenes():
 
     return scenes
 
-def create_full_video(lines, output):
+def create_full_video(lines, output, content_type):
     drawtext_filters = []
 
+    if content_type == "shorts":
+        scene_duration = 3
+        width, height = 1080, 1920
+        bg_video = "bg_shorts.mp4"
+        bg_audio = "bg_shorts.mp3"
+    else:
+        scene_duration = 8
+        width, height = 1920, 1080
+        bg_video = "bg_long.mp4"
+        bg_audio = "bg_long.mpeg"
+
     for i, text in enumerate(lines):
-        start = i * 3
-        end = start + 3
+        start = i * scene_duration
+        end = start + scene_duration
 
         safe_text = text.replace("'", "\\'").replace(":", "\\:")
 
@@ -97,12 +108,13 @@ def create_full_video(lines, output):
             f"text_align=center:"
             f"x=(w-text_w)/2:"
             f"y=(h-text_h)/2:"
-            f"enable='between(t,{start},{end})':alpha='if(lt(t,{start}+0.5),(t-{start})/0.5,1)'"
+            f"enable='between(t,{start},{end})':"
+            f"alpha='if(lt(t,{start}+0.5),(t-{start})/0.5,1)'"
         )
 
         drawtext_filters.append(filter_text)
 
-    # Watermark
+    # 🔹 Watermark
     safe_watermark = WATERMARK_TEXT.replace("'", "\\'")
 
     watermark_filter = (
@@ -118,16 +130,27 @@ def create_full_video(lines, output):
 
     final_filter = ",".join(drawtext_filters)
 
+    # 🔹 Dynamic total duration
+    total_duration = len(lines) * scene_duration
+
     cmd = [
         "ffmpeg",
-        "-i", "bg.mp4",
-        "-i", "audio.mp3",
-        "-t", "15",
+        "-i", bg_video,
+        "-i", bg_audio,
+        "-map", "0:v:0",
+        "-map", "1:a:0",
+        "-t", str(total_duration),  # ✅ dynamic now
         "-vf",
-        f"scale={VIDEO_WIDTH}:{VIDEO_HEIGHT}:force_original_aspect_ratio=increase,"
-        f"crop={VIDEO_WIDTH}:{VIDEO_HEIGHT},"
+        f"scale={width}:{height}:force_original_aspect_ratio=increase,"
+        f"crop={width}:{height},"
         f"boxblur=10:1,"
         f"{final_filter}",
+        "-c:v", "libx264",
+        "-preset", "veryfast",
+        "-crf", "23",
+        "-c:a", "aac",
+        "-b:a", "192k",
+        "-shortest",
         "-y",
         output
     ]
@@ -139,7 +162,6 @@ def create_full_video(lines, output):
         print(result.stderr.decode())
         raise Exception("Video generation failed")
     
-from google.auth.transport.requests import Request
 
 def upload_to_youtube(video_file, title, hashtags, bibleverse):
     """
@@ -163,28 +185,28 @@ def upload_to_youtube(video_file, title, hashtags, bibleverse):
             print("❌ Failed to load OAuth credentials")
             return False
 
-        youtube = build("youtube", "v3", credentials=creds)
+        # youtube = build("youtube", "v3", credentials=creds)
 
-        request = youtube.videos().insert(
-            part="snippet,status",
-            body={
-                "snippet": {
-                    "title": f"{title} | {bibleverse[:50]}... #shorts",
-                    "description": description,
-                    "tags": [
-                        "faith", "shorts", "jesus", "healing", "bible", "christian"
-                    ],
-                    "categoryId": "22"
-                },
-                "status": {
-                    "privacyStatus": "public"
-                }
-            },
-            media_body=MediaFileUpload(video_file)
-        )
+        # request = youtube.videos().insert(
+        #     part="snippet,status",
+        #     body={
+        #         "snippet": {
+        #             "title": f"{title} | {bibleverse[:50]}... #shorts",
+        #             "description": description,
+        #             "tags": [
+        #                 "faith", "shorts", "jesus", "healing", "trust god"
+        #             ],
+        #             "categoryId": "22"
+        #         },
+        #         "status": {
+        #             "privacyStatus": "public"
+        #         }
+        #     },
+        #     media_body=MediaFileUpload(video_file)
+        # )
 
-        response = request.execute()
-        print("✅ Uploaded:", response["id"])
+        # response = request.execute()
+        # print("✅ Uploaded:", response["id"])
         return True
 
     except HttpError as e:
@@ -271,8 +293,8 @@ def setup():
     
     return True
 
-def get_next_scenes():
-    """Get the next set of scenes from Google Sheets."""
+def get_next_content():
+    """Get next content based on Type (shorts/long) from Google Sheets."""
     try:
         creds = load_service_account()
         client = gspread.authorize(creds)
@@ -281,29 +303,56 @@ def get_next_scenes():
         rows = sheet.get_all_records()
 
         for i, row in enumerate(rows):
-           status = row.get("Status", "")
-           if status not in ["DONE", "FAILED", "DRIVE"]:
-                scenes = [
-                    row.get("Hook", ""),
-                    row.get("Emotion", ""),
-                    row.get("Struggle", ""),
-                    row.get("Message", ""),
-                    row.get("Ending", "")
-                ]
+            status = row.get("Status", "")
+            content_type = row.get("Type", "shorts").lower()
+
+            if status not in ["DONE", "FAILED", "DRIVE"]:
+
+                # 🔹 SHORTS
+                if content_type == "shorts":
+                    scenes = [
+                        row.get("Hook", ""),
+                        row.get("Emotion", ""),
+                        row.get("Struggle", ""),
+                        row.get("Message", ""),
+                        row.get("Ending", "")
+                    ]
+
+                    scenes = [
+                        text.replace("\\n", "\n").replace("/n", "\n")
+                        for text in scenes
+                    ]
+
+                # 🔹 LONG VIDEO
+                else:
+                    def split_scenes(text):
+                        if not text:
+                            return []
+                        return [
+                            s.strip().replace("\\n", "\n").replace("/n", "\n")
+                            for s in text.split("%") if s.strip()
+                        ]
+
+                    hook = split_scenes(row.get("Hook", ""))
+                    story = split_scenes(row.get("Story", ""))
+                    verse = split_scenes(row.get("Verse", ""))
+                    ending = split_scenes(row.get("Ending", ""))
+
+                    scenes = hook + story + verse + ending
+
+                # fallback safety
+                scenes = [s if s.strip() else "..." for s in scenes]
 
                 hashtags = row.get("Hashtags", "")
                 bibleverse = row.get("Bibleverse", "")
 
-                # Convert literal \n and /n to actual newlines
-                scenes = [text.replace("\\n", "\n").replace("/n", "\n") for text in scenes]
-                # Avoid empty scenes
-                scenes = [s if s.strip() else "..." for s in scenes]
-                return i + 2, scenes,hashtags,bibleverse, sheet  # row index + data
+                return i + 2, scenes, hashtags, bibleverse, sheet, content_type
+
     except Exception as e:
         print(f"Error accessing Google Sheets: {e}")
-        return None, None, None, None, None
-    
-    return None, None, None, None, None
+        return None, None, None, None, None, None
+
+    return None, None, None, None, None, None
 
 def upload_and_update_status(output_filename, scenes, hashtags, bibleverse, row_index, sheet):
     """Upload video to YouTube and update sheet status. Falls back to Drive upload."""
@@ -358,8 +407,8 @@ def main():
     if not setup():
         return
     
-    # Get next scenes from sheet
-    row_index, scenes, hashtags, bibleverse, sheet = get_next_scenes()
+    row_index, scenes, hashtags, bibleverse, sheet, content_type = get_next_content()
+
     if not scenes:
         print("ℹ️ No new scenes to process")
         return
@@ -389,7 +438,7 @@ def main():
                 f"output_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4"
             )
 
-            create_full_video(scenes, output_filename)
+            create_full_video(scenes, output_filename, content_type)
 
             if not os.path.exists(output_filename):
                 print("❌ Video generation failed")
