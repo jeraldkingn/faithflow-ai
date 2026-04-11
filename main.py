@@ -334,11 +334,12 @@ def get_next_content():
                         ]
 
                     hook = split_scenes(row.get("Hook", ""))
-                    story = split_scenes(row.get("Story", ""))
-                    verse = split_scenes(row.get("Verse", ""))
+                    story = split_scenes(row.get("Emotion", ""))
+                    verse = split_scenes(row.get("Struggle", ""))
+                    message = split_scenes(row.get("Message", ""))
                     ending = split_scenes(row.get("Ending", ""))
 
-                    scenes = hook + story + verse + ending
+                    scenes = hook + story + verse + message + ending
 
                 # fallback safety
                 scenes = [s if s.strip() else "..." for s in scenes]
