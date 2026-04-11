@@ -374,14 +374,21 @@ def upload_and_update_status(output_filename, scenes, hashtags, bibleverse, row_
 
         final_title = title
 
-        if bibleverse:
-            clean_verse = bibleverse.strip().rstrip("-–— ")
-            if len(clean_verse) > 60:
-                clean_verse = clean_verse[:60].rsplit(" ", 1)[0]  # cut at word
-            final_title += f" | {clean_verse}"
-
         if content_type == "shorts":
+            final_title = title[:60].strip()
             final_title += " #shorts"
+
+        else:
+            final_title = title
+
+            if bibleverse:
+                clean_verse = bibleverse.strip().rstrip("-–— ")
+
+                if len(clean_verse) > 60:
+                    clean_verse = clean_verse[:60].rsplit(" ", 1)[0]
+
+                # ✅ ALWAYS append (moved outside)
+                final_title += f" | {clean_verse}"
 
         # 🚨 FINAL SAFETY CHECK
         if not final_title or len(final_title.strip()) < 10:
