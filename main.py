@@ -90,7 +90,7 @@ def create_full_video(lines, output, content_type):
     else:
         scene_duration = 8
         width, height = 1920, 1080
-        bg_video = "bg_long.mp4"
+        bg_video = "bg_long.MP4"
         bg_audio = "bg_long.mpeg"
 
     for i, text in enumerate(lines):
