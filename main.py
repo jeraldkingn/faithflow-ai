@@ -186,28 +186,28 @@ def upload_to_youtube(video_file, title, hashtags, bibleverse):
             print("❌ Failed to load OAuth credentials")
             return False
 
-        # youtube = build("youtube", "v3", credentials=creds)
+        youtube = build("youtube", "v3", credentials=creds)
 
-        # request = youtube.videos().insert(
-        #     part="snippet,status",
-        #     body={
-        #         "snippet": {
-        #             "title": f"{title} | {bibleverse[:50]}... #shorts",
-        #             "description": description,
-        #             "tags": [
-        #                 "faith", "shorts", "jesus", "healing", "trust god"
-        #             ],
-        #             "categoryId": "22"
-        #         },
-        #         "status": {
-        #             "privacyStatus": "public"
-        #         }
-        #     },
-        #     media_body=MediaFileUpload(video_file)
-        # )
+        request = youtube.videos().insert(
+            part="snippet,status",
+            body={
+                "snippet": {
+                    "title": f"{title} | {bibleverse[:50]}... #shorts",
+                    "description": description,
+                    "tags": [
+                        "faith", "shorts", "jesus", "healing", "trust god"
+                    ],
+                    "categoryId": "22"
+                },
+                "status": {
+                    "privacyStatus": "public"
+                }
+            },
+            media_body=MediaFileUpload(video_file)
+        )
 
-        # response = request.execute()
-        # print("✅ Uploaded:", response["id"])
+        response = request.execute()
+        print("✅ Uploaded:", response["id"])
         return True
 
     except HttpError as e:
