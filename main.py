@@ -192,7 +192,7 @@ def upload_to_youtube(video_file, title, hashtags, bibleverse):
             part="snippet,status",
             body={
                 "snippet": {
-                    "title": f"{title} | {bibleverse[:50]}... #shorts",
+                    "title": f"{title}",
                     "description": description,
                     "tags": [
                         "faith", "shorts", "jesus", "healing", "trust god"
@@ -398,9 +398,9 @@ def upload_and_update_status(output_filename, scenes, hashtags, bibleverse, row_
         # Determine status based on results
         if upload_success:
             status = "DONE"
-        elif drive_link:
-            print("Fallback upload to Drive successful")
-            status = "DRIVE"
+        # elif drive_link:
+        #     print("Fallback upload to Drive successful")
+        #     status = "DRIVE"
         else:
             status = "FAILED"
         
