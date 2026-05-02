@@ -1,6 +1,6 @@
 import json
 import os
-from random import random
+import random
 import subprocess
 from datetime import datetime
 from turtle import width
@@ -89,7 +89,12 @@ def create_full_video(lines, output, content_type):
         width, height = 1080, 1920
         video_folder = "videos"
         bg_videos = [f for f in os.listdir(video_folder) if f.endswith(".mp4")]
-        bg_video = random.choice(bg_videos)
+
+        if not bg_videos:
+            raise ValueError("No video files found in 'videos' folder")
+
+        # ✅ Correct usage
+        bg_video = os.path.join(video_folder, random.choice(bg_videos))
         bg_audio = "bg_shorts.mp3"
     else:
         scene_duration = 8
