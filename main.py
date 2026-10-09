@@ -535,36 +535,36 @@ def upload_and_update_status(output_filename, scenes, hashtags, bibleverse, row_
 
         print("FINAL TITLE CLEAN:", repr(final_title))
 
-        upload_success = upload_to_youtube(output_filename, final_title, hashtags, bibleverse)
+        # upload_success = upload_to_youtube(output_filename, final_title, hashtags, bibleverse)
 
-        if not upload_success:
-            print("YouTube failed → uploading to Drive")
-            drive_link = upload_to_drive(output_filename)
+        # if not upload_success:
+        #     print("YouTube failed → uploading to Drive")
+        #     drive_link = upload_to_drive(output_filename)
 
-        # Determine status based on results
-        if upload_success:
-            status = "DONE"
-        elif drive_link:
-            print("Fallback upload to Drive successful")
-            status = "DRIVE"
-        else:
-            status = "FAILED"
+        # # Determine status based on results
+        # if upload_success:
+        #     status = "DONE"
+        # elif drive_link:
+        #     print("Fallback upload to Drive successful")
+        #     status = "DRIVE"
+        # else:
+        #     status = "FAILED"
         
-        # Update status based on upload results
-        headers = sheet.row_values(1)
-        if "Status" in headers:
-            status_col = headers.index("Status") + 1
-            sheet.update_cell(row_index, status_col, status)
-            print(f"Status updated to {status}")
-        else:
-            print("Status column not found")
+        # # Update status based on upload results
+        # headers = sheet.row_values(1)
+        # if "Status" in headers:
+        #     status_col = headers.index("Status") + 1
+        #     sheet.update_cell(row_index, status_col, status)
+        #     print(f"Status updated to {status}")
+        # else:
+        #     print("Status column not found")
 
-        if drive_link and "DriveLink" in headers:
-            link_col = headers.index("DriveLink") + 1
-            sheet.update_cell(row_index, link_col, drive_link)
-            print("Drive link saved to sheet")    
+        # if drive_link and "DriveLink" in headers:
+        #     link_col = headers.index("DriveLink") + 1
+        #     sheet.update_cell(row_index, link_col, drive_link)
+        #     print("Drive link saved to sheet")    
         
-        return upload_success
+        return True
     except Exception as e:
         print(f"Error during upload/update: {e}")
         return False
