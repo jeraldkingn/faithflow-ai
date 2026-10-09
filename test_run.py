@@ -5,11 +5,14 @@ from PIL import Image, ImageDraw, ImageFont
 
 from main import (
     IMAGE_FOLDERS,
+    AUDIO_FOLDER,
     FONT_PATH,
     OUTPUT_FOLDER,
+    SHORTS_AUDIO,
     create_full_video,
     get_ffmpeg_executable,
     setup,
+    video_generation_context,
 )
 
 # Test input (as provided)
@@ -24,6 +27,8 @@ def ensure_dirs():
     for f in IMAGE_FOLDERS:
         if not os.path.exists(f):
             os.makedirs(f)
+
+    os.makedirs(AUDIO_FOLDER, exist_ok=True)
 
     if not os.path.exists('test_output'):
         os.makedirs('test_output')
@@ -54,13 +59,13 @@ def create_sample_images():
 
 
 def make_silent_audio(duration_s=16):
-    # Create a silent audio file bg_shorts.mp3 using ffmpeg
-    if os.path.exists('bg_shorts.mp3'):
+    # Create a silent audio file for the Shorts test
+    if os.path.exists(SHORTS_AUDIO):
         return
     cmd = [
         get_ffmpeg_executable(), '-y', '-f', 'lavfi', '-i',
         'anullsrc=r=44100:cl=stereo', '-t', str(duration_s),
-        '-q:a', '9', '-acodec', 'libmp3lame', 'bg_shorts.mp3',
+        '-q:a', '9', '-acodec', 'libmp3lame', SHORTS_AUDIO,
     ]
     subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -88,7 +93,8 @@ def run_test():
     output = os.path.join('test_output', f"test_output_{int(time.time())}.mp4")
 
     print('Generating test video to', output)
-    create_full_video(scenes, output, 'shorts', temp_files=[])
+    with video_generation_context() as temp_files:
+        create_full_video(scenes, output, 'shorts', temp_files=temp_files)
 
     if os.path.exists(output):
         print('Test video generated:', output)

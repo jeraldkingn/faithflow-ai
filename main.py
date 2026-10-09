@@ -12,13 +12,14 @@ from googleapiclient.http import MediaFileUpload
 from googleapiclient.errors import HttpError
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import contextlib
+from PIL import ImageFont
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
 from google.oauth2.credentials import Credentials as OAuthCredentials
 from google.auth.transport.requests import Request
 
 # Configuration constants
 FONT_PATH = os.path.abspath("font.ttf")
-FONT_SIZE = 80
+FONT_SIZE = 60
 LINE_SPACING = 12
 DEFAULT_DURATION = 3
 TEXT_Y_OFFSET = -100
@@ -40,14 +41,18 @@ FOLDER_ID = os.getenv("GOOGLE_DRIVE_FOLDER_ID")
 TEMP_TEXT_FILE = "temp.txt"
 FILE_LIST_FILE = "file_list.txt"
 OUTPUT_FOLDER = "videos"
+TEMP_VIDEO_FOLDER = "temp_video"
+AUDIO_FOLDER = "audio"
+SHORTS_AUDIO = os.path.join(AUDIO_FOLDER, "bg_shorts.mp3")
+LONG_AUDIO = os.path.join(AUDIO_FOLDER, "bg_long.mp3")
 
 # Image folders for shorts (ordered to match scenes)
 IMAGE_FOLDERS = [
-    "b.hook",
-    "b.emotion",
-    "b.struggle",
-    "b.message",
-    "e.ending",
+    os.path.join("images", "b.hook"),
+    os.path.join("images", "b.emotion"),
+    os.path.join("images", "b.struggle"),
+    os.path.join("images", "b.message"),
+    os.path.join("images", "e.ending"),
 ]
 
 
@@ -69,6 +74,44 @@ def get_ffmpeg_executable():
         "FFmpeg was not found. Install FFmpeg and add it to PATH, "
         "or set FFMPEG_PATH to the full path of ffmpeg.exe."
     )
+
+
+def ffmpeg_filter_path(path):
+    """Escape a path for use as a value in an FFmpeg filter option."""
+    return os.path.abspath(path).replace("\\", "/").replace(":", r"\\:")
+
+
+def wrap_caption(text, font, max_width):
+    """Wrap caption text so it stays within the video's horizontal safe area."""
+    wrapped_lines = []
+    for source_line in text.splitlines() or [""]:
+        words = source_line.split()
+        current_line = ""
+        for word in words:
+            candidate = f"{current_line} {word}".strip()
+            if font.getlength(candidate) <= max_width:
+                current_line = candidate
+                continue
+
+            if current_line:
+                wrapped_lines.append(current_line)
+                current_line = ""
+
+            if font.getlength(word) <= max_width:
+                current_line = word
+                continue
+
+            for character in word:
+                candidate = current_line + character
+                if current_line and font.getlength(candidate) > max_width:
+                    wrapped_lines.append(current_line)
+                    current_line = character
+                else:
+                    current_line = candidate
+
+        wrapped_lines.append(current_line)
+
+    return "\n".join(wrapped_lines)
 
 
 @contextlib.contextmanager
@@ -114,135 +157,107 @@ def get_user_scenes():
 
 def create_full_video(lines, output, content_type, temp_files=None):
     ffmpeg = get_ffmpeg_executable()
+    font_path = ffmpeg_filter_path(FONT_PATH)
+    caption_font = ImageFont.truetype(FONT_PATH, FONT_SIZE)
     drawtext_filters = []
 
     if content_type == "shorts":
         scene_duration = 3
         width, height = 1080, 1920
-        bg_audio = "bg_shorts.mp3"
+        bg_audio = SHORTS_AUDIO
 
-        # Try to use image-based shorts if images exist in configured folders
         image_inputs = []
         for folder in IMAGE_FOLDERS:
             folder_path = os.path.abspath(folder)
-            if os.path.isdir(folder_path):
-                imgs = [os.path.join(folder_path, f) for f in os.listdir(folder_path)
-                        if f.lower().endswith((".jpg", ".jpeg", ".png", ".webp"))]
-                if imgs:
-                    image_inputs.append(random.choice(imgs))
-                else:
-                    image_inputs.append(None)
-            else:
-                image_inputs.append(None)
+            if not os.path.isdir(folder_path):
+                raise ValueError(f"Required shorts image folder not found: '{folder_path}'")
 
-        use_images = any(image_inputs)
-        if use_images:
-            # ensure temp_files list exists to track created files for cleanup
-            if temp_files is None:
-                temp_files = []
-            # create a short video segment for each image and then concat
-            segment_files = []
-            for i, img in enumerate(image_inputs):
-                if not img:
-                    # fallback: create a blank color segment
-                    img = None
+            imgs = [os.path.join(folder_path, f) for f in os.listdir(folder_path)
+                    if f.lower().endswith((".jpg", ".jpeg", ".png", ".webp"))]
+            if not imgs:
+                raise ValueError(f"No images found in required shorts image folder '{folder_path}'")
+            image_inputs.append(random.choice(imgs))
 
-                seg_path = os.path.join(OUTPUT_FOLDER, f"temp_img_seg_{int(time.time())}_{i}.mp4")
-                segment_files.append(seg_path)
-                temp_files.append(seg_path)
+        if temp_files is None:
+            temp_files = []
+        os.makedirs(TEMP_VIDEO_FOLDER, exist_ok=True)
+        segment_files = []
+        for i, img in enumerate(image_inputs):
+            seg_path = os.path.join(TEMP_VIDEO_FOLDER, f"temp_img_seg_{int(time.time())}_{i}.mp4")
+            segment_files.append(seg_path)
+            temp_files.append(seg_path)
 
-                # build drawtext for this scene
-                text = lines[i] if i < len(lines) else ""
-                safe_text = text.replace("'", "\\'").replace(":", "\\:")
-
-                if img:
-                    vf_parts = [
-                        f"scale={width}:{height}:force_original_aspect_ratio=increase",
-                        f"crop={width}:{height}",
-                        "boxblur=10:1",
-                        f"drawtext=fontfile={FONT_PATH}:text='{safe_text}':fontcolor=white:fontsize={FONT_SIZE}:line_spacing={LINE_SPACING}:text_align=center:x=(w-text_w)/2:y=(h-text_h)/2"
-                    ]
-                    vf = ",".join(vf_parts)
-                    cmd_seg = [
-                        ffmpeg, "-y", "-loop", "1", "-i", img,
-                        "-t", str(scene_duration),
-                        "-vf", vf,
-                        "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",
-                        seg_path
-                    ]
-                else:
-                    # create a colored background with text
-                    vf_parts = [
-                        f"color=size={width}x{height}:color=black",
-                        "boxblur=10:1",
-                        f"drawtext=fontfile={FONT_PATH}:text='{safe_text}':fontcolor=white:fontsize={FONT_SIZE}:line_spacing={LINE_SPACING}:text_align=center:x=(w-text_w)/2:y=(h-text_h)/2"
-                    ]
-                    vf = ",".join(vf_parts)
-                    cmd_seg = [
-                        ffmpeg, "-y", "-f", "lavfi", "-i", vf,
-                        "-t", str(scene_duration),
-                        "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",
-                        seg_path
-                    ]
-
-                result = subprocess.run(cmd_seg, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                if result.returncode != 0:
-                    print("FFmpeg segment error:")
-                    print(result.stderr.decode())
-                    raise Exception("Image segment generation failed")
-
-            # write concat file
-            list_path = os.path.join(OUTPUT_FOLDER, FILE_LIST_FILE)
-            with open(list_path, "w", encoding="utf-8") as fh:
-                for p in segment_files:
-                    fh.write(f"file '{p}'\n")
-
-            temp_files.append(list_path)
-
-            # final concat with audio
-            cmd = [
-                ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i", list_path,
-                "-i", bg_audio,
-                "-map", "0:v:0",
-                "-map", "1:a:0",
-                "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
-                "-c:a", "aac", "-b:a", "192k", "-shortest", output
+            text = lines[i] if i < len(lines) else ""
+            caption = wrap_caption(text.upper(), caption_font, int(width * 0.88))
+            safe_text = caption.replace("'", "\\'").replace(":", "\\:")
+            safe_watermark = WATERMARK_TEXT.replace("'", "\\'").replace(":", "\\:")
+            vf_parts = [
+                f"scale={width}:{height}:force_original_aspect_ratio=increase:flags=lanczos",
+                f"crop={width}:{height}",
+                f"zoompan=z='min(1+on*0.00013,1.01)':x='trunc(iw/2-iw/zoom/2)':y='trunc(ih/2-ih/zoom/2)':d=1:s={width}x{height}:fps=25",
+                "format=yuv420p",
+                f"drawtext=fontfile={font_path}:text='{safe_watermark}':fontcolor={WATERMARK_FONTCOLOR}:fontsize={WATERMARK_FONTSIZE}:x=(w-text_w)/2:y=h-text_h-{WATERMARK_BOTTOM_MARGIN}:shadowcolor={WATERMARK_SHADOWCOLOR}:shadowx={WATERMARK_SHADOWX}:shadowy={WATERMARK_SHADOWY}",
+                f"drawtext=fontfile={font_path}:text='{safe_text}':fontcolor=white:fontsize={FONT_SIZE}:line_spacing={LINE_SPACING}:text_align=center:borderw=4:bordercolor=black:x=(w-text_w)/2:y=(h-text_h)/2",
             ]
-            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            cmd_seg = [
+                ffmpeg, "-y", "-loop", "1", "-i", img,
+                "-t", str(scene_duration),
+                "-vf", ",".join(vf_parts),
+                "-c:v", "libx264", "-preset", "slow", "-crf", "18",
+                "-tune", "stillimage", "-pix_fmt", "yuv420p",
+                seg_path
+            ]
+
+            result = subprocess.run(cmd_seg, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             if result.returncode != 0:
-                print("FFmpeg concat error:")
+                print("FFmpeg segment error:")
                 print(result.stderr.decode())
-                raise Exception("Final concat failed")
+                raise Exception("Image segment generation failed")
 
-            return
-        else:
-            video_folder = "videos"
-            bg_videos = [f for f in os.listdir(video_folder) if f.endswith(".mp4")]
+        list_path = os.path.join(TEMP_VIDEO_FOLDER, FILE_LIST_FILE)
+        with open(list_path, "w", encoding="utf-8") as fh:
+            for p in segment_files:
+                fh.write(f"file '{os.path.basename(p)}'\n")
 
-            if not bg_videos:
-                raise ValueError("No video files found in 'videos' folder")
+        temp_files.append(list_path)
 
-            # ✅ Correct usage
-            bg_video = os.path.join(video_folder, random.choice(bg_videos))
+        cmd = [
+            ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i", list_path,
+            "-i", bg_audio,
+            "-map", "0:v:0",
+            "-map", "1:a:0",
+            "-c:v", "copy",
+            "-c:a", "aac", "-b:a", "192k", "-shortest", output
+        ]
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if result.returncode != 0:
+            print("FFmpeg concat error:")
+            print(result.stderr.decode())
+            raise Exception("Final concat failed")
+
+        return
     else:
         scene_duration = 8
         width, height = 1920, 1080
-        bg_video = "bg_long.MP4"
-        bg_audio = "bg_long.mp3"
+        bg_video = os.path.join(OUTPUT_FOLDER, "bg_long.MP4")
+        bg_audio = LONG_AUDIO
 
     for i, text in enumerate(lines):
         start = i * scene_duration
         end = start + scene_duration
 
-        safe_text = text.replace("'", "\\'").replace(":", "\\:")
+        caption = wrap_caption(text.upper(), caption_font, int(width * 0.88))
+        safe_text = caption.replace("'", "\\'").replace(":", "\\:")
 
         filter_text = (
-            f"drawtext=fontfile={FONT_PATH}:"
+            f"drawtext=fontfile={font_path}:"
             f"text='{safe_text}':"
             f"fontcolor=white:"
             f"fontsize={FONT_SIZE}:"
             f"line_spacing={LINE_SPACING}:"
             f"text_align=center:"
+            f"borderw=4:"
+            f"bordercolor=black:"
             f"x=(w-text_w)/2:"
             f"y=(h-text_h)/2:"
             f"enable='between(t,{start},{end})':"
@@ -255,7 +270,7 @@ def create_full_video(lines, output, content_type, temp_files=None):
     safe_watermark = WATERMARK_TEXT.replace("'", "\\'")
 
     watermark_filter = (
-        f"drawtext=fontfile={FONT_PATH}:"
+        f"drawtext=fontfile={font_path}:"
         f"text='{safe_watermark}':"
         f"fontcolor={WATERMARK_FONTCOLOR}:"
         f"fontsize={WATERMARK_FONTSIZE}:"
@@ -535,36 +550,36 @@ def upload_and_update_status(output_filename, scenes, hashtags, bibleverse, row_
 
         print("FINAL TITLE CLEAN:", repr(final_title))
 
-        # upload_success = upload_to_youtube(output_filename, final_title, hashtags, bibleverse)
+        upload_success = upload_to_youtube(output_filename, final_title, hashtags, bibleverse)
 
-        # if not upload_success:
-        #     print("YouTube failed → uploading to Drive")
-        #     drive_link = upload_to_drive(output_filename)
+        if not upload_success:
+            print("YouTube failed → uploading to Drive")
+            drive_link = upload_to_drive(output_filename)
 
-        # # Determine status based on results
-        # if upload_success:
-        #     status = "DONE"
-        # elif drive_link:
-        #     print("Fallback upload to Drive successful")
-        #     status = "DRIVE"
-        # else:
-        #     status = "FAILED"
+        # Determine status based on results
+        if upload_success:
+            status = "DONE"
+        elif drive_link:
+            print("Fallback upload to Drive successful")
+            status = "DRIVE"
+        else:
+            status = "FAILED"
         
-        # # Update status based on upload results
-        # headers = sheet.row_values(1)
-        # if "Status" in headers:
-        #     status_col = headers.index("Status") + 1
-        #     sheet.update_cell(row_index, status_col, status)
-        #     print(f"Status updated to {status}")
-        # else:
-        #     print("Status column not found")
+        # Update status based on upload results
+        headers = sheet.row_values(1)
+        if "Status" in headers:
+            status_col = headers.index("Status") + 1
+            sheet.update_cell(row_index, status_col, status)
+            print(f"Status updated to {status}")
+        else:
+            print("Status column not found")
 
-        # if drive_link and "DriveLink" in headers:
-        #     link_col = headers.index("DriveLink") + 1
-        #     sheet.update_cell(row_index, link_col, drive_link)
-        #     print("Drive link saved to sheet")    
+        if drive_link and "DriveLink" in headers:
+            link_col = headers.index("DriveLink") + 1
+            sheet.update_cell(row_index, link_col, drive_link)
+            print("Drive link saved to sheet")    
         
-        return True
+        return upload_success
     except Exception as e:
         print(f"Error during upload/update: {e}")
         return False
