@@ -4,3 +4,4 @@ google-auth-oauthlib
 google-auth-httplib2
 google-api-python-client
 httplib2
+Pillow>=9.0.0

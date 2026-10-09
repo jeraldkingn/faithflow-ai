@@ -1,6 +1,7 @@
 import json
 import os
 import random
+import shutil
 import subprocess
 from datetime import datetime
 from turtle import width
@@ -39,6 +40,36 @@ FOLDER_ID = os.getenv("GOOGLE_DRIVE_FOLDER_ID")
 TEMP_TEXT_FILE = "temp.txt"
 FILE_LIST_FILE = "file_list.txt"
 OUTPUT_FOLDER = "videos"
+
+# Image folders for shorts (ordered to match scenes)
+IMAGE_FOLDERS = [
+    "b.hook",
+    "b.emotion",
+    "b.struggle",
+    "b.message",
+    "e.ending",
+]
+
+
+def get_ffmpeg_executable():
+    """Return the FFmpeg executable configured for this environment."""
+    configured_path = os.getenv("FFMPEG_PATH")
+    if configured_path:
+        executable = configured_path if os.path.isfile(configured_path) else shutil.which(configured_path)
+        if executable:
+            return executable
+        raise FileNotFoundError(
+            f"FFMPEG_PATH points to an unavailable executable: {configured_path}"
+        )
+
+    executable = shutil.which("ffmpeg")
+    if executable:
+        return executable
+    raise FileNotFoundError(
+        "FFmpeg was not found. Install FFmpeg and add it to PATH, "
+        "or set FFMPEG_PATH to the full path of ffmpeg.exe."
+    )
+
 
 @contextlib.contextmanager
 def video_generation_context():
@@ -81,21 +112,118 @@ def get_user_scenes():
 
     return scenes
 
-def create_full_video(lines, output, content_type):
+def create_full_video(lines, output, content_type, temp_files=None):
+    ffmpeg = get_ffmpeg_executable()
     drawtext_filters = []
 
     if content_type == "shorts":
         scene_duration = 3
         width, height = 1080, 1920
-        video_folder = "videos"
-        bg_videos = [f for f in os.listdir(video_folder) if f.endswith(".mp4")]
-
-        if not bg_videos:
-            raise ValueError("No video files found in 'videos' folder")
-
-        # ✅ Correct usage
-        bg_video = os.path.join(video_folder, random.choice(bg_videos))
         bg_audio = "bg_shorts.mp3"
+
+        # Try to use image-based shorts if images exist in configured folders
+        image_inputs = []
+        for folder in IMAGE_FOLDERS:
+            folder_path = os.path.abspath(folder)
+            if os.path.isdir(folder_path):
+                imgs = [os.path.join(folder_path, f) for f in os.listdir(folder_path)
+                        if f.lower().endswith((".jpg", ".jpeg", ".png", ".webp"))]
+                if imgs:
+                    image_inputs.append(random.choice(imgs))
+                else:
+                    image_inputs.append(None)
+            else:
+                image_inputs.append(None)
+
+        use_images = any(image_inputs)
+        if use_images:
+            # ensure temp_files list exists to track created files for cleanup
+            if temp_files is None:
+                temp_files = []
+            # create a short video segment for each image and then concat
+            segment_files = []
+            for i, img in enumerate(image_inputs):
+                if not img:
+                    # fallback: create a blank color segment
+                    img = None
+
+                seg_path = os.path.join(OUTPUT_FOLDER, f"temp_img_seg_{int(time.time())}_{i}.mp4")
+                segment_files.append(seg_path)
+                temp_files.append(seg_path)
+
+                # build drawtext for this scene
+                text = lines[i] if i < len(lines) else ""
+                safe_text = text.replace("'", "\\'").replace(":", "\\:")
+
+                if img:
+                    vf_parts = [
+                        f"scale={width}:{height}:force_original_aspect_ratio=increase",
+                        f"crop={width}:{height}",
+                        "boxblur=10:1",
+                        f"drawtext=fontfile={FONT_PATH}:text='{safe_text}':fontcolor=white:fontsize={FONT_SIZE}:line_spacing={LINE_SPACING}:text_align=center:x=(w-text_w)/2:y=(h-text_h)/2"
+                    ]
+                    vf = ",".join(vf_parts)
+                    cmd_seg = [
+                        ffmpeg, "-y", "-loop", "1", "-i", img,
+                        "-t", str(scene_duration),
+                        "-vf", vf,
+                        "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",
+                        seg_path
+                    ]
+                else:
+                    # create a colored background with text
+                    vf_parts = [
+                        f"color=size={width}x{height}:color=black",
+                        "boxblur=10:1",
+                        f"drawtext=fontfile={FONT_PATH}:text='{safe_text}':fontcolor=white:fontsize={FONT_SIZE}:line_spacing={LINE_SPACING}:text_align=center:x=(w-text_w)/2:y=(h-text_h)/2"
+                    ]
+                    vf = ",".join(vf_parts)
+                    cmd_seg = [
+                        ffmpeg, "-y", "-f", "lavfi", "-i", vf,
+                        "-t", str(scene_duration),
+                        "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",
+                        seg_path
+                    ]
+
+                result = subprocess.run(cmd_seg, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                if result.returncode != 0:
+                    print("FFmpeg segment error:")
+                    print(result.stderr.decode())
+                    raise Exception("Image segment generation failed")
+
+            # write concat file
+            list_path = os.path.join(OUTPUT_FOLDER, FILE_LIST_FILE)
+            with open(list_path, "w", encoding="utf-8") as fh:
+                for p in segment_files:
+                    fh.write(f"file '{p}'\n")
+
+            temp_files.append(list_path)
+
+            # final concat with audio
+            cmd = [
+                ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i", list_path,
+                "-i", bg_audio,
+                "-map", "0:v:0",
+                "-map", "1:a:0",
+                "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+                "-c:a", "aac", "-b:a", "192k", "-shortest", output
+            ]
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if result.returncode != 0:
+                print("FFmpeg concat error:")
+                print(result.stderr.decode())
+                raise Exception("Final concat failed")
+
+            return
+        else:
+            video_folder = "videos"
+            bg_videos = [f for f in os.listdir(video_folder) if f.endswith(".mp4")]
+
+            if not bg_videos:
+                raise ValueError("No video files found in 'videos' folder")
+
+            # ✅ Correct usage
+            bg_video = os.path.join(video_folder, random.choice(bg_videos))
     else:
         scene_duration = 8
         width, height = 1920, 1080
@@ -143,7 +271,7 @@ def create_full_video(lines, output, content_type):
     total_duration = len(lines) * scene_duration
 
     cmd = [
-        "ffmpeg",
+        ffmpeg,
         "-i", bg_video,
         "-i", bg_audio,
         "-map", "0:v:0",
@@ -476,7 +604,7 @@ def main():
         return
     
     # Use context manager for automatic cleanup
-    with video_generation_context():
+    with video_generation_context() as temp_files:
         try:
             print("🎬 Creating full video...")
 
@@ -485,7 +613,7 @@ def main():
                 f"output_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4"
             )
 
-            create_full_video(scenes, output_filename, content_type)
+            create_full_video(scenes, output_filename, content_type, temp_files=temp_files)
 
             if not os.path.exists(output_filename):
                 print("❌ Video generation failed")
